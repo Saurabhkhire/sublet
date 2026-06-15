@@ -32,8 +32,8 @@ fallback). There is no caching layer or queue; matching runs synchronously on de
   person, incremental matching, score ranges), serializes JSON.
 - **Database:** Stores users, config, tracks, sponsors, matching profiles/runs, projects and
   their join tables, and scores. Enforces uniqueness invariants.
-- **LLM/Agents:** `llm.js` produces embeddings for "what they plan to build". No autonomous
-  agents — matching is a deterministic algorithm (see §9).
+- **LLM/Agents:** `llm.js` calls `gpt-4o-mini` to score idea similarity for "what they plan to
+  build". No autonomous agents — matching is a deterministic algorithm (see §9).
 - **External Integrations:** OpenAI embeddings API (optional). Neon Postgres (when deployed).
 
 ## 3.4 Database selection (configuration-driven)

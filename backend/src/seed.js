@@ -9,18 +9,20 @@ import { get, run, insert } from './db.js';
 export async function ensureSeed() {
   await createSchema();
 
-  // Admin account (login: admin123 / admin123).
-  const admin = await get('SELECT id FROM users WHERE email = ?', ['admin123']);
+  // Admin account — credentials come from the environment (defaults: admin123 / admin123).
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin123';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  const admin = await get('SELECT id FROM users WHERE email = ?', [adminEmail]);
   if (!admin) {
     await insert('users', {
-      email: 'admin123',
-      password_hash: bcrypt.hashSync('admin123', 10),
+      email: adminEmail,
+      password_hash: bcrypt.hashSync(adminPassword, 10),
       linkedin: '',
       role: 'admin',
       is_judge: 1,
       created_at: new Date().toISOString(),
     });
-    console.log('[seed] created admin account (admin123 / admin123)');
+    console.log(`[seed] created admin account (${adminEmail})`);
   }
 
   // Config row.

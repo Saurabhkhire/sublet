@@ -27,12 +27,14 @@
 
 ## 2.4 LLM / AI
 - **LLM Provider(s):** OpenAI (optional; offline fallback when no key)
-- **Model(s):** none for chat — similarity uses embeddings only
-- **Embedding Model(s):** `text-embedding-3-small` (configurable via `OPENAI_EMBED_MODEL`)
-- **Vector Store (if any):** none — embeddings are computed per matching run and compared in
-  memory with cosine similarity
-- **Guardrails / Safety:** embeddings only (no free-text generation), so no prompt-injection
-  surface; failures fall back to a deterministic local embedding
+- **Model(s):** `gpt-4o-mini` chat model (configurable via `OPENAI_MODEL`) — rates idea
+  similarity for team matching and returns a JSON score
+- **Embedding Model(s):** none
+- **Vector Store (if any):** none — pairwise similarity is computed per matching run and cached
+  in memory
+- **Guardrails / Safety:** JSON-only response (`response_format: json_object`), temperature 0,
+  score clamped to [0,1]; on any failure or missing key it falls back to a deterministic local
+  token-overlap score so matching never blocks
 
 ## 2.5 Infrastructure / DevOps
 - **Hosting:** any Node host for the backend; any static host for the built frontend

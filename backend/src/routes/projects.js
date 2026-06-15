@@ -66,9 +66,22 @@ router.post('/', async (req, res) => {
     created_at: new Date().toISOString(),
   });
 
-  for (const uid of participantIds) {
-    await insert('project_participants', { project_id: projectId, user_id: uid });
+  // The pre-check above catches the common case, but two submissions sharing a
+  // participant can both pass it and race to insert. The UNIQUE(user_id) constraint
+  // is the real guarantee — if an insert violates it, roll back this project so no
+  // orphan/partial submission is left behind, and return a clean 409.
+  try {
+    for (const uid of participantIds) {
+      await insert('project_participants', { project_id: projectId, user_id: uid });
+    }
+  } catch (err) {
+    await run('DELETE FROM project_participants WHERE project_id = ?', [projectId]);
+    await run('DELETE FROM projects WHERE id = ?', [projectId]);
+    return res.status(409).json({
+      error: 'One of the selected participants was just added to another project. Please retry.',
+    });
   }
+
   for (const tid of [...new Set(tracks.map(Number))]) {
     await run('INSERT INTO project_tracks (project_id, track_id) VALUES (?, ?)', [projectId, tid]);
   }

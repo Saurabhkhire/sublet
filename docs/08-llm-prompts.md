@@ -1,35 +1,36 @@
 # 8) LLM Prompts
 
-This project uses the LLM **only for embeddings** to measure how similar two participants'
-"what do you plan to build" descriptions are. There are **no chat/completion prompts**, so the
-classic system/user prompt template is N/A. The spec below documents the embedding usage as the
-single AI integration.
+The LLM is used for one thing: rating how similar two participants' "what do you plan to build"
+descriptions are, which feeds the team-matching score. It uses an OpenAI **chat** model
+(`gpt-4o-mini` by default, set by `OPENAI_MODEL`) that returns a JSON similarity score.
 
-### Prompt Spec: `plan-to-build-similarity` (embeddings)
-- **Use Case:** Score idea similarity between participants during team matching so people
-  building related things are more likely to be grouped.
-- **System Prompt:** N/A (embeddings endpoint, no instructions).
-- **User Prompt Template:** the raw `plan_to_build` text of each participant is sent as input.
-- **Input Variables:** `plan_to_build` (one per participant in the current matching run).
-- **Provider / Model:** OpenAI `text-embedding-3-small` (override via `OPENAI_EMBED_MODEL`).
-- **Expected Output Format:** a numeric vector per input; similarity = cosine of two vectors,
-  clamped to `[0, 1]`, weighted at 0.5 in the pair score (see §9 / matching engine).
-- **Temperature / Max Tokens:** N/A for embeddings.
-- **Safety Constraints:** No free-text generation, so no prompt-injection or unsafe-output
-  surface. If the API key is absent or the call fails, the system falls back to a deterministic
-  local bag-of-words hashed embedding (`backend/src/services/llm.js`), so matching never blocks
-  and tests run fully offline.
+### Prompt Spec: `plan-to-build-similarity`
+- **Use Case:** Score idea similarity between two participants during team matching so people
+  building related things are more likely to be grouped together.
+- **Provider / Model:** OpenAI `gpt-4o-mini` (override via `OPENAI_MODEL`).
+- **System Prompt:**
+  > You rate how similar two hackathon project ideas are, so people building related things can
+  > be grouped. Respond ONLY with JSON of the form `{"score": <number between 0 and 1>}`, where
+  > 1 means essentially the same idea and 0 means completely unrelated.
+- **User Prompt Template:** `Idea A: {plan_a}\n\nIdea B: {plan_b}`
+- **Input Variables:** `plan_a`, `plan_b` (the two `plan_to_build` texts).
+- **Expected Output Format:** `{ "score": number }` in `[0,1]`; the app clamps and weights it
+  at 0.5 in the pair score (see §9).
+- **Temperature / Max Tokens:** temperature `0`; `response_format: { type: "json_object" }`.
+- **Safety Constraints:** JSON-only structured output (no free-form text shown to users), so no
+  prompt-injection or unsafe-output surface. If `OPENAI_API_KEY` is absent or the call fails,
+  the system falls back to a deterministic local token-overlap (Jaccard) score
+  (`backend/src/services/llm.js`), so matching works fully offline and tests are deterministic.
+- **Scale note:** matching makes one call per pair of opt-ins (N·(N−1)/2). Calls are bounded to
+  8 concurrent (`LLM_CONCURRENCY` in `matchingEngine.js`) to respect rate limits — see §9 and
+  the load discussion in §3.
 
 ### Example
 - **Input:**
 ```json
-{ "input": ["A tool to summarise PDFs with AI", "Chat over your PDFs with AI"] }
+{ "Idea A": "A tool to summarise PDFs with AI", "Idea B": "Chat over your PDFs with AI" }
 ```
-- **Output (conceptual):**
+- **Output:**
 ```json
-{ "similarity_between_the_two": 0.82 }
+{ "score": 0.82 }
 ```
-
-> The actual OpenAI response is a list of embedding vectors; the app computes the cosine
-> similarity itself. With no API key, the offline embedding yields a deterministic similarity
-> from shared tokens.

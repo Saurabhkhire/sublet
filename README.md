@@ -10,7 +10,8 @@ Project submission, team matching and judging for a hackathon.
 ## Features
 
 - **Register / Login** with email, password, LinkedIn (JWT auth).
-- **Admin account** (`admin123` / `admin123`) with full control: edit hackathon name &
+- **Admin account** (default `admin123` / `admin123`, configurable via `ADMIN_EMAIL` /
+  `ADMIN_PASSWORD`) with full control: edit hackathon name &
   details, manage Tracks and Sponsors (multiple entries), add/remove users, and choose who
   can view & judge projects.
 - **Team matching (optional):** people pick role, tracks, sponsors and describe what they
@@ -57,9 +58,11 @@ together using `concurrently`. The Vite dev server proxies `/api/*` to the backe
 |---|---|---|
 | `PORT` | `4000` | API port |
 | `JWT_SECRET` | dev fallback | **set in production** |
+| `ADMIN_EMAIL` | `admin123` | seeded admin login (configurable) |
+| `ADMIN_PASSWORD` | `admin123` | seeded admin password (configurable) |
 | `DATABASE_URL` | empty → SQLite | set to a `postgres://…neon.tech/…` URL to use Neon |
-| `OPENAI_API_KEY` | empty → offline embeddings | enables real OpenAI similarity |
-| `OPENAI_EMBED_MODEL` | `text-embedding-3-small` | embedding model |
+| `OPENAI_API_KEY` | empty → offline fallback | enables real OpenAI similarity |
+| `OPENAI_MODEL` | `gpt-4o-mini` | chat model used to score idea similarity |
 
 ## Deploying with Neon
 

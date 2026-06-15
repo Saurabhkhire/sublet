@@ -1,5 +1,5 @@
 import express from 'express';
-import { get, all, run, insert } from '../db.js';
+import { get, all, run } from '../db.js';
 import { authRequired, judgeRequired } from '../middleware/auth.js';
 import { SCORE_CRITERIA, SCORE_MAX_TOTAL } from '../constants.js';
 
@@ -28,28 +28,27 @@ router.post('/:projectId/score', async (req, res) => {
   }
   const comments = body.comments || '';
 
-  const existing = await get('SELECT id FROM scores WHERE project_id = ? AND judge_id = ?', [
-    req.params.projectId,
-    req.user.id,
-  ]);
-  if (existing) {
-    await run(
-      `UPDATE scores SET presentation=?, technical=?, code_quality=?, functionality=?,
-       innovation=?, ux=?, total=?, comments=? WHERE id=?`,
-      [
-        values.presentation, values.technical, values.code_quality, values.functionality,
-        values.innovation, values.ux, total, comments, existing.id,
-      ]
-    );
-  } else {
-    await insert('scores', {
-      project_id: Number(req.params.projectId),
-      judge_id: req.user.id,
-      ...values,
-      total,
-      comments,
-    });
-  }
+  // Atomic upsert keyed on the unique (project_id, judge_id). Safe if the same judge
+  // submits concurrently — no read-then-write race, never a duplicate row.
+  await run(
+    `INSERT INTO scores
+       (project_id, judge_id, presentation, technical, code_quality, functionality, innovation, ux, total, comments)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (project_id, judge_id) DO UPDATE SET
+       presentation = excluded.presentation,
+       technical = excluded.technical,
+       code_quality = excluded.code_quality,
+       functionality = excluded.functionality,
+       innovation = excluded.innovation,
+       ux = excluded.ux,
+       total = excluded.total,
+       comments = excluded.comments`,
+    [
+      Number(req.params.projectId), req.user.id,
+      values.presentation, values.technical, values.code_quality, values.functionality,
+      values.innovation, values.ux, total, comments,
+    ]
+  );
   res.json({ ok: true, total });
 });
 

@@ -1,66 +1,78 @@
-// Embedding service for the "what do you plan to build" similarity score.
-// Uses OpenAI embeddings when OPENAI_API_KEY is set; otherwise falls back to a
-// deterministic local hashing embedding so the app (and tests) work fully offline.
+// LLM similarity for the "what do you plan to build" team-matching score.
+// Uses an OpenAI chat model (default gpt-4o-mini) to rate how similar two ideas are.
+// Falls back to a deterministic local token-overlap score when no API key is set
+// (so the app and tests work fully offline).
 
-const DIM = 256;
-
-function deterministicEmbed(text) {
-  // Bag-of-words hashed into a fixed-size vector. Deterministic + cosine-friendly.
-  const vec = new Array(DIM).fill(0);
-  const tokens = String(text || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-  for (const tok of tokens) {
-    let h = 0;
-    for (let i = 0; i < tok.length; i++) h = (h * 31 + tok.charCodeAt(i)) >>> 0;
-    vec[h % DIM] += 1;
-  }
-  return vec;
+function tokenize(text) {
+  return new Set(
+    String(text || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((t) => t.length > 2)
+  );
 }
 
-async function openaiEmbed(texts) {
-  const model = process.env.OPENAI_EMBED_MODEL || 'text-embedding-3-small';
-  const res = await fetch('https://api.openai.com/v1/embeddings', {
+// Deterministic offline similarity: Jaccard overlap of significant tokens.
+function jaccardSimilarity(a, b) {
+  const sa = tokenize(a);
+  const sb = tokenize(b);
+  if (sa.size === 0 && sb.size === 0) return 0;
+  let inter = 0;
+  for (const t of sa) if (sb.has(t)) inter++;
+  const union = sa.size + sb.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
+async function openaiSimilarity(a, b) {
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
     },
-    body: JSON.stringify({ model, input: texts }),
+    body: JSON.stringify({
+      model,
+      temperature: 0,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You rate how similar two hackathon project ideas are, so people building ' +
+            'related things can be grouped. Respond ONLY with JSON of the form ' +
+            '{"score": <number between 0 and 1>}, where 1 means essentially the same idea ' +
+            'and 0 means completely unrelated.',
+        },
+        {
+          role: 'user',
+          content: `Idea A: ${a || '(none)'}\n\nIdea B: ${b || '(none)'}`,
+        },
+      ],
+    }),
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`OpenAI embeddings failed: ${res.status} ${body}`);
+    throw new Error(`OpenAI chat failed: ${res.status} ${body}`);
   }
   const data = await res.json();
-  return data.data.map((d) => d.embedding);
+  const content = data.choices?.[0]?.message?.content || '{}';
+  const parsed = JSON.parse(content);
+  const score = Number(parsed.score);
+  if (Number.isNaN(score)) return 0;
+  return Math.max(0, Math.min(1, score));
 }
 
-/** Returns an array of embedding vectors, one per input text. */
-export async function embedTexts(texts) {
+/** Returns a similarity score in [0,1] between two "plan to build" descriptions. */
+export async function planSimilarity(a, b) {
   if (process.env.OPENAI_API_KEY) {
     try {
-      return await openaiEmbed(texts);
+      return await openaiSimilarity(a, b);
     } catch (err) {
-      // Fail soft to the offline embedding so matching never blocks.
-      console.warn('[llm] OpenAI embedding failed, using fallback:', err.message);
+      // Fail soft to the offline score so matching never blocks.
+      console.warn('[llm] OpenAI similarity failed, using fallback:', err.message);
     }
   }
-  return texts.map(deterministicEmbed);
-}
-
-export function cosineSimilarity(a, b) {
-  let dot = 0;
-  let na = 0;
-  let nb = 0;
-  const n = Math.min(a.length, b.length);
-  for (let i = 0; i < n; i++) {
-    dot += a[i] * b[i];
-    na += a[i] * a[i];
-    nb += b[i] * b[i];
-  }
-  if (na === 0 || nb === 0) return 0;
-  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+  return jaccardSimilarity(a, b);
 }
