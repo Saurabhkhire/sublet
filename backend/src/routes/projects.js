@@ -1,9 +1,11 @@
 import express from 'express';
 import { get, all, run, insert } from '../db.js';
-import { authRequired, judgeRequired } from '../middleware/auth.js';
+import { authRequired, hackathonContext, judgeRequired } from '../middleware/auth.js';
+import { SCORE_CRITERIA } from '../constants.js';
 
-const router = express.Router();
-router.use(authRequired);
+// Mounted at /api/hackathons/:hid/projects
+const router = express.Router({ mergeParams: true });
+router.use(authRequired, hackathonContext);
 
 async function loadProjectDetail(projectId) {
   const project = await get('SELECT * FROM projects WHERE id = ?', [projectId]);
@@ -24,28 +26,22 @@ async function loadProjectDetail(projectId) {
   return { ...project, participants, tracks, sponsors };
 }
 
-// Create a submission. Each participant may belong to only ONE project.
+// Create a submission. Each participant may be on only ONE project per hackathon.
 router.post('/', async (req, res) => {
-  const {
-    name,
-    short_description,
-    demo_video_link,
-    git_link,
-    participants = [],
-    tracks = [],
-    sponsors = [],
-  } = req.body || {};
-
+  const { name, short_description, demo_video_link, git_link, participants = [], tracks = [], sponsors = [] } =
+    req.body || {};
   if (!name || !String(name).trim()) {
     return res.status(400).json({ error: 'Project name is required' });
   }
-  // The creator is always a participant.
   const participantIds = Array.from(new Set([req.user.id, ...participants.map(Number)]));
 
-  // Enforce: no participant already on another project.
+  // Pre-check: nobody already on another project in this hackathon.
   const clashes = [];
   for (const uid of participantIds) {
-    const existing = await get('SELECT project_id FROM project_participants WHERE user_id = ?', [uid]);
+    const existing = await get(
+      'SELECT project_id FROM project_participants WHERE hackathon_id = ? AND user_id = ?',
+      [req.hackathonId, uid]
+    );
     if (existing) {
       const u = await get('SELECT email FROM users WHERE id = ?', [uid]);
       clashes.push(u ? u.email : `user ${uid}`);
@@ -58,6 +54,7 @@ router.post('/', async (req, res) => {
   }
 
   const projectId = await insert('projects', {
+    hackathon_id: req.hackathonId,
     name: String(name).trim(),
     short_description: short_description || '',
     demo_video_link: demo_video_link || '',
@@ -66,15 +63,12 @@ router.post('/', async (req, res) => {
     created_at: new Date().toISOString(),
   });
 
-  // The pre-check above catches the common case, but two submissions sharing a
-  // participant can both pass it and race to insert. The UNIQUE(user_id) constraint
-  // is the real guarantee — if an insert violates it, roll back this project so no
-  // orphan/partial submission is left behind, and return a clean 409.
+  // UNIQUE(hackathon_id, user_id) is the real guard against a concurrent race.
   try {
     for (const uid of participantIds) {
-      await insert('project_participants', { project_id: projectId, user_id: uid });
+      await insert('project_participants', { hackathon_id: req.hackathonId, project_id: projectId, user_id: uid });
     }
-  } catch (err) {
+  } catch {
     await run('DELETE FROM project_participants WHERE project_id = ?', [projectId]);
     await run('DELETE FROM projects WHERE id = ?', [projectId]);
     return res.status(409).json({
@@ -82,38 +76,36 @@ router.post('/', async (req, res) => {
     });
   }
 
+  const validTracks = (await all('SELECT id FROM tracks WHERE hackathon_id = ?', [req.hackathonId])).map((t) => t.id);
+  const validSponsors = (await all('SELECT id FROM sponsors WHERE hackathon_id = ?', [req.hackathonId])).map((s) => s.id);
   for (const tid of [...new Set(tracks.map(Number))]) {
-    await run('INSERT INTO project_tracks (project_id, track_id) VALUES (?, ?)', [projectId, tid]);
+    if (validTracks.includes(tid)) await run('INSERT INTO project_tracks (project_id, track_id) VALUES (?, ?)', [projectId, tid]);
   }
   for (const sid of [...new Set(sponsors.map(Number))]) {
-    await run('INSERT INTO project_sponsors (project_id, sponsor_id) VALUES (?, ?)', [projectId, sid]);
+    if (validSponsors.includes(sid)) await run('INSERT INTO project_sponsors (project_id, sponsor_id) VALUES (?, ?)', [projectId, sid]);
   }
   res.status(201).json(await loadProjectDetail(projectId));
 });
 
-// List projects.
-//  - judges/admins see every project (with optional ?sponsor=<id> filter).
-//  - regular users see only projects they participate in.
+// List: judges/admins see all (optional ?sponsor= filter); others see only their own.
 router.get('/', async (req, res) => {
-  const isJudge = req.user.role === 'admin' || req.user.is_judge === 1;
   let rows;
-  if (isJudge) {
+  if (req.isJudge) {
     const sponsorId = req.query.sponsor;
     if (sponsorId) {
       rows = await all(
-        `SELECT DISTINCT p.* FROM projects p
-         JOIN project_sponsors ps ON ps.project_id = p.id
-         WHERE ps.sponsor_id = ? ORDER BY p.id DESC`,
-        [sponsorId]
+        `SELECT DISTINCT p.* FROM projects p JOIN project_sponsors ps ON ps.project_id = p.id
+         WHERE p.hackathon_id = ? AND ps.sponsor_id = ? ORDER BY p.id DESC`,
+        [req.hackathonId, sponsorId]
       );
     } else {
-      rows = await all('SELECT * FROM projects ORDER BY id DESC');
+      rows = await all('SELECT * FROM projects WHERE hackathon_id = ? ORDER BY id DESC', [req.hackathonId]);
     }
   } else {
     rows = await all(
       `SELECT p.* FROM projects p JOIN project_participants pp ON pp.project_id = p.id
-       WHERE pp.user_id = ? ORDER BY p.id DESC`,
-      [req.user.id]
+       WHERE p.hackathon_id = ? AND pp.user_id = ? ORDER BY p.id DESC`,
+      [req.hackathonId, req.user.id]
     );
   }
   const detailed = [];
@@ -121,16 +113,69 @@ router.get('/', async (req, res) => {
   res.json(detailed);
 });
 
-// Detail view: judges/admins, or a participant of the project.
-router.get('/:id', async (req, res) => {
-  const detail = await loadProjectDetail(req.params.id);
-  if (!detail) return res.status(404).json({ error: 'Project not found' });
-  const isJudge = req.user.role === 'admin' || req.user.is_judge === 1;
+router.get('/:projectId', async (req, res) => {
+  const detail = await loadProjectDetail(req.params.projectId);
+  if (!detail || detail.hackathon_id !== req.hackathonId) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
   const isParticipant = detail.participants.some((p) => p.id === req.user.id);
-  if (!isJudge && !isParticipant) {
+  if (!req.isJudge && !isParticipant) {
     return res.status(403).json({ error: 'You are not allowed to view this project' });
   }
   res.json(detail);
+});
+
+/* ----------------------------- Judging ----------------------------- */
+
+// Submit/update the caller-judge's score (atomic upsert).
+router.post('/:projectId/score', judgeRequired, async (req, res) => {
+  const project = await get('SELECT id FROM projects WHERE id = ? AND hackathon_id = ?', [
+    req.params.projectId,
+    req.hackathonId,
+  ]);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const body = req.body || {};
+  const values = {};
+  let total = 0;
+  for (const c of SCORE_CRITERIA) {
+    const v = Number(body[c.key]);
+    if (Number.isNaN(v) || v < 0 || v > c.max) {
+      return res.status(400).json({ error: `${c.label} must be between 0 and ${c.max}` });
+    }
+    values[c.key] = v;
+    total += v;
+  }
+  const comments = body.comments || '';
+
+  await run(
+    `INSERT INTO scores
+       (project_id, judge_id, presentation, technical, code_quality, functionality, innovation, ux, total, comments)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (project_id, judge_id) DO UPDATE SET
+       presentation = excluded.presentation, technical = excluded.technical,
+       code_quality = excluded.code_quality, functionality = excluded.functionality,
+       innovation = excluded.innovation, ux = excluded.ux,
+       total = excluded.total, comments = excluded.comments`,
+    [
+      Number(req.params.projectId), req.user.id,
+      values.presentation, values.technical, values.code_quality, values.functionality,
+      values.innovation, values.ux, total, comments,
+    ]
+  );
+  res.json({ ok: true, total });
+});
+
+router.get('/:projectId/scores', judgeRequired, async (req, res) => {
+  const rows = await all(
+    `SELECT s.*, u.email as judge_email FROM scores s JOIN users u ON u.id = s.judge_id
+     WHERE s.project_id = ? ORDER BY s.id`,
+    [req.params.projectId]
+  );
+  const mine = rows.find((r) => r.judge_id === req.user.id) || null;
+  const avg = rows.length ? Math.round((rows.reduce((a, r) => a + r.total, 0) / rows.length) * 10) / 10 : null;
+  const visible = req.user.role === 'admin' ? rows : mine ? [mine] : [];
+  res.json({ scores: visible, mine, average: avg, judge_count: rows.length });
 });
 
 export default router;

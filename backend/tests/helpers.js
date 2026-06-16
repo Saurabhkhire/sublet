@@ -58,3 +58,28 @@ export async function loginAdmin(api) {
   });
   return res.body.token;
 }
+
+// Create a hackathon (admin) and return its id.
+export async function createHackathon(api, adminToken, name = 'Test Hack', details = '') {
+  const res = await api('POST', '/api/hackathons', { token: adminToken, body: { name, details } });
+  return res.body.id;
+}
+
+// Add a track/sponsor and return its id.
+export async function addTrack(api, adminToken, hid, name) {
+  const res = await api('POST', `/api/hackathons/${hid}/tracks`, { token: adminToken, body: { name } });
+  return res.body.id;
+}
+export async function addSponsor(api, adminToken, hid, name) {
+  const res = await api('POST', `/api/hackathons/${hid}/sponsors`, { token: adminToken, body: { name } });
+  return res.body.id;
+}
+// Grant a user view+judge access to a hackathon.
+export async function makeJudge(api, adminToken, hid, userId) {
+  return api('POST', `/api/hackathons/${hid}/judges`, { token: adminToken, body: { user_id: userId } });
+}
+// Look up a user's id by email (via admin user list).
+export async function userIdByEmail(api, adminToken, email) {
+  const res = await api('GET', '/api/admin/users', { token: adminToken });
+  return res.body.find((u) => u.email === email)?.id;
+}

@@ -1,129 +1,85 @@
 # 11) Test Cases
 
 All automated tests live in `backend/tests/` and run with `npm test` (repo root) →
-**40 tests, all passing**. Each row traces to a §4 UI Page + Workflow. "API positive/negative"
-names the concrete test; "UI positive/negative" describes the manual screen behavior covered by
-the same rule.
+**51 tests, all passing**. Each row traces to a §4 UI Page + Workflow.
 
 ## 11.1 Test case matrix (by UI Page + Workflow)
 
 ### `Register` — Workflow 1: Create account
-- **UI positive:** Valid email + 6+ char password → lands on Dashboard logged in.
-- **UI negative:** Bad email / short password / taken email → inline error, stays on page.
+- **UI positive:** valid email + 6+ char password → Hackathons, logged in.
+- **UI negative:** bad email / short password / taken email → inline error.
 - **API positive:** `auth.test.js` — "creates account and returns token".
 - **API negative:** `auth.test.js` — invalid email (400), short password (400), duplicate (409).
 
-### `Login` — Workflow 1: Log in
-- **UI positive:** Correct credentials → Dashboard with role-appropriate nav.
-- **UI negative:** Wrong password → "Invalid email or password".
-- **API positive:** `auth.test.js` — "valid credentials succeed"; "admin account works".
-- **API negative:** `auth.test.js` — "wrong password rejected" (401).
+### `Login` — Workflows 1 & 2: Log in / stay logged in
+- **API positive:** `auth.test.js` — valid credentials; admin account; `/me` returns role.
+- **API negative:** `auth.test.js` — wrong password (401); no token (401).
 
-### `Login` — Workflow 2: Stay logged in across reloads
-- **UI positive:** Refresh keeps you logged in.
-- **UI negative:** Tampered/absent token returns to Login.
-- **API positive:** `auth.test.js` — "admin account works" then `GET /me` returns role.
-- **API negative:** `auth.test.js` — "no token is unauthorised" (401).
+### `Users` — Workflows 1 & 2: Add / remove user (admin)
+- **API positive:** `admin.test.js` — lists users; adds a user; removes a user.
+- **API negative:** `admin.test.js` — duplicate email (409); admin account cannot be removed
+  (400); non-admin cannot list users (403).
 
-### `Admin Panel` — Workflow 1: Edit hackathon details
-- **UI positive:** Save new name/details → "Saved!", reflected on Dashboard.
-- **UI negative:** Non-admin never sees the page.
-- **API positive:** `admin.test.js` — "admin updates hackathon name & details".
-- **API negative:** `admin.test.js` — "non-admin cannot update" (403).
+### `Hackathons` — Workflows 1 & 2: Browse / create
+- **UI positive:** cards list; admin creates and is taken to Admin.
+- **UI negative:** non-admin can't create; empty name blocked.
+- **API positive:** `hackathons.test.js` — admin creates; anyone lists + opens meta.
+- **API negative:** `hackathons.test.js` — non-admin create (403); empty name (400); unknown
+  hackathon (404).
 
-### `Admin Panel` — Workflow 2 & 3: Manage tracks / sponsors
-- **UI positive:** Add/rename/delete updates the list immediately.
-- **UI negative:** Empty name is rejected.
-- **API positive:** `admin.test.js` — "create multiple tracks"; "create and delete" sponsor.
-- **API negative:** `admin.test.js` — "empty name rejected" (400).
+### `Hackathon · Admin` — Workflow 1: Edit details
+- **API positive:** `hackathons.test.js` — "admin edits details".
 
-### `Admin Panel` — Workflow 4: Manage user access
-- **UI positive:** Toggle flips a user's "Can view & judge".
-- **UI negative:** Admin row is fixed and cannot be toggled off into a non-judge.
-- **API positive:** `admin.test.js` — "admin grants judge permission".
-- **API negative:** `admin.test.js` — "non-admin cannot list users" (403).
+### `Hackathon · Admin` — Workflows 2 & 3: Tracks / sponsors
+- **API positive:** `hackathons.test.js` — "admin manages multiple entries".
+- **API negative:** `hackathons.test.js` — empty name (400); non-admin add (403).
 
-### `Admin Panel` — Workflow 5: Add a user
-- **UI positive:** New user appears in the table.
-- **UI negative:** Duplicate email shows an error.
-- **API positive:** `admin.test.js` — "admin adds a new user" (201).
-- **API negative:** covered by the unique-email rule (409) on duplicate add.
+### `Hackathon · Admin` — Workflow 4: Assign judges
+- **API positive:** `hackathons.test.js` — "admin grants and revokes view/judge access".
 
-### `Admin Panel` — Workflow 6: Remove a user
-- **UI positive:** User disappears after confirm.
-- **UI negative:** Removing the admin is blocked.
-- **API positive:** `admin.test.js` — "admin removes a user".
-- **API negative:** `admin.test.js` — "admin account cannot be removed" (400).
+### `Hackathon · Team Matching` — Workflow 1: Opt in
+- **API positive:** `matching.test.js` — opts in; matched user sees group.
+- **API negative:** `matching.test.js` — missing role/plan (400); already-matched edit (409);
+  non-admin lists opt-ins (403).
 
-### `Team Matching` — Workflow 1: Opt into / update profile
-- **UI positive:** Save profile → success note; editable until matched.
-- **UI negative:** Missing role/plan blocked; locked once matched.
-- **API positive:** `matching.test.js` — "user opts into matching"; "matched user sees group".
-- **API negative:** `matching.test.js` — "missing role/plan rejected" (400); "already-matched
-  user cannot edit" (409); "non-admin cannot list opt-ins" (403).
+### `Hackathon · Admin` — Workflow 5: Run team matching
+- **API positive:** `matching.test.js` — groups of ≤4, all placed; second run matches only new
+  opt-ins; matching is scoped per hackathon (isolation).
+- **API negative:** `matching.test.js` — re-running with no new opt-ins (400).
 
-### `Admin Panel` — Workflow 7: Run team matching
-- **UI positive:** "Run matching" forms teams of ≤4 and shows them; counts update.
-- **UI negative:** Button disabled / rejected when nobody new is waiting.
-- **API positive:** `matching.test.js` — "groups of ≤4, all placed"; "only NEW opt-ins matched
-  on a second run".
-- **API negative:** `matching.test.js` — "re-running with no new opt-ins is rejected" (400).
+### `Hackathon · Submit Project` — Workflows 1 & 2: Submit / list
+- **API positive:** `projects.test.js` — submission with participants/tracks/sponsors; user sees
+  only own; same person can join a project in a different hackathon (isolation).
+- **API negative:** `projects.test.js` — missing name (400); participant already on another
+  project in this hackathon (409); unrelated non-judge cannot view details (403).
 
-### `Submit Project` — Workflow 1: Submit a project
-- **UI positive:** Submit → "Project submitted!", appears under My Projects (creator included).
-- **UI negative:** No name, or a member already on another project → error, nothing saved.
-- **API positive:** `projects.test.js` — "submission with participants/tracks/sponsors".
-- **API negative:** `projects.test.js` — "missing name rejected" (400); "participant already on
-  another project" (409).
+### `Hackathon · Judging` — Workflows 1 & 2: Filter / score
+- **API positive:** `judging.test.js` — criteria sum to 100; judge scores (total computed);
+  re-scoring updates; admin sees aggregate average; `projects.test.js` — filter by sponsor.
+- **API negative:** `judging.test.js` — non-judge cannot score (403); out-of-range (400);
+  outsider cannot read scores (403).
 
-### `Submit Project` — Workflow 2 / `Judging` — Workflow 1: List & filter projects
-- **UI positive:** Normal user sees only their project; judge sees all and can filter by sponsor.
-- **UI negative:** Unrelated non-judge cannot open someone else's project.
-- **API positive:** `projects.test.js` — "judge sees all"; "user sees only their own";
-  "judge filters by sponsor".
-- **API negative:** `projects.test.js` — "unrelated non-judge cannot view a project" (403).
+### `Hackathon · Admin` — Workflow 6: Reset projects & judging
+- **API positive:** `hackathons.test.js` — "admin clears all projects + judge data".
+- **API negative:** `hackathons.test.js` — non-admin cannot reset (403).
 
-### `Judging` — Workflow 2: Score a project
-- **UI positive:** Enter six criteria (live total /100) + comments → "Score saved!"; admin sees
-  all scores + average.
-- **UI negative:** Out-of-range value blocked; non-judge has no access.
-- **API positive:** `judging.test.js` — "criteria sum to 100"; "judge scores, total computed";
-  "re-scoring updates"; "admin sees aggregate average".
-- **API negative:** `judging.test.js` — "non-judge cannot score" (403); "out-of-range rejected"
-  (400); "outsider cannot read scores" (403).
+### Concurrency (cross-cutting, `concurrency.test.js`)
+- **Positive:** racing submissions for the same participant → exactly one wins, no orphan;
+  same judge scoring twice at once → one score row (atomic upsert).
 
-## 11.2 Detailed test case format (example)
+## 11.2 Detailed test case (example)
 
-### Test Case ID: `TC-001`
-- **Title:** Reject project submission when a member is already on another project
-- **UI Page (§4):** Submit Project
-- **Workflow (§4):** Workflow 1 — Submit a project
+### Test Case ID: `TC-010`
+- **Title:** Reset deletes all projects and judging for a hackathon
+- **UI Page (§4):** Hackathon · Admin · **Workflow 6 — Reset projects & judging**
 - **Type:** API
-- **Preconditions:** User B is already a participant on an existing project.
-- **Steps:**
-  1. Authenticate as User C.
-  2. Submit a new project including User B as a participant.
-  3. Read the response.
-- **Expected result:** HTTP 409 with a message naming User B; no project created.
-- **Actual result:** HTTP 409, message "These participants are already part of another
-  project: b@example.com".
+- **Preconditions:** a hackathon with at least one submitted project.
+- **Steps:** 1. Authenticate as admin. 2. Call reset for the hackathon. 3. List projects.
+- **Expected result:** reset returns the deleted count; the projects list is empty.
+- **Actual result:** matches expected.
 - **Status:** Pass
 
-### Test Case ID: `TC-002`
-- **Title:** Second matching run groups only newcomers
-- **UI Page (§4):** Admin Panel
-- **Workflow (§4):** Workflow 7 — Run team matching
-- **Type:** API
-- **Preconditions:** Five people were matched in a first run; two new people then opt in.
-- **Steps:**
-  1. Authenticate as admin.
-  2. Trigger a matching run.
-  3. Sum the members across returned groups.
-- **Expected result:** Total members = 2 (only the newcomers), existing teams untouched.
-- **Actual result:** Total = 2.
-- **Status:** Pass
-
-## 11.3 Running the tests
+## 11.3 Running
 ```bash
-npm test        # repo root → backend suite; expected: tests 40 · pass 40 · fail 0
+npm test        # repo root → backend suite; expected: tests 51 · pass 51 · fail 0
 ```

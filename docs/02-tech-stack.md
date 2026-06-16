@@ -1,11 +1,13 @@
 # 2) Tech Stack
 
 ## 2.1 Frontend
-- **Framework:** React 18
+- **Framework:** React 18 (app branded **SUBLET**)
 - **Language:** JavaScript (JSX, ES modules)
-- **UI Library:** none (hand-written CSS in `frontend/src/styles.css`)
-- **State Management:** React Context (`frontend/src/auth.jsx`) + local component state
-- **Routing:** React Router v6 (`react-router-dom`)
+- **UI Library:** none — hand-written design system in `frontend/src/styles.css` (Inter font,
+  light theme, top nav + hackathon-workspace sidebar)
+- **State Management:** React Context for auth (`frontend/src/auth.jsx`); hackathon-scoped meta
+  shared via the router Outlet context (`HackathonLayout`); local component state otherwise
+- **Routing:** React Router v6 — `/`, `/users`, and nested `/h/:hid/{matching,submit,judging,admin}`
 - **Build / Dev server:** Vite 5 (dev server proxies `/api` → `http://localhost:4000`)
 
 ## 2.2 Backend

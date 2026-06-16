@@ -147,13 +147,14 @@ On **Register** (and optionally after verify-email), show **Put as sponsor**, **
 > Full section: [`docs/01-use-case.md`](docs/01-use-case.md).
 
 ### 1.1 Project Summary
-- **Project Name:** Hackathon Platform
-- **Version / Update Tag:** v1.0.0
+- **Project Name:** SUBLET
+- **Version / Update Tag:** v2.0.0
 - **Date:** 2026-06-15
 - **Owner / Team:** Hackathon organizers
-- **Short Description:** Participants register, optionally get matched into balanced teams,
-  submit one project each, and admin-selected judges score them on a 6-criteria rubric. An
-  admin console manages hackathon details, tracks, sponsors, users, access, and matching runs.
+- **Short Description:** A **multi-hackathon** platform. Admins create hackathons, each with its
+  own details, tracks, sponsors, selected judges and matching run. Within a hackathon,
+  participants opt into team matching, submit one project each, and selected judges score them on
+  a 6-criteria rubric. Admins can reset a hackathon (delete all projects + judging) or delete it.
 
 ### 1.2 Problem Statement
 - **Problem:** Running a hackathon needs team formation, project submission, controlled
@@ -306,9 +307,11 @@ One simple **text** diagram for **this workflow only** (boxes and arrows, no API
 ## 5) Database Structure
 
 > **Filled instance:** [`docs/05-database-structure.md`](docs/05-database-structure.md) — tables
-> `users`, `config`, `tracks`, `sponsors`, `matching_profiles`, `matching_runs`, `projects`,
-> `project_participants` (unique `user_id` ⇒ one project/person), `project_tracks`,
-> `project_sponsors`, `scores` (unique per project+judge). Source: `backend/src/schema.js`.
+> `users` (global), `hackathons`, `hackathon_judges`, and hackathon-scoped `tracks`, `sponsors`,
+> `matching_profiles`, `matching_runs`, `projects`, `project_participants`
+> (unique `(hackathon_id, user_id)` ⇒ one project/person/hackathon), `project_tracks`,
+> `project_sponsors`, `scores` (unique per project+judge). Legacy DBs auto-migrate into a
+> "Ziward Hackathon" (`backend/src/migrate.js`). Source: `backend/src/schema.js`.
 
 ## 5.1 ER/Relationship Notes
 Describe relationships across tables (1-1, 1-M, M-M).
@@ -344,8 +347,9 @@ Document model classes with fields only (no language-specific code block require
 ## 7) API Flows
 
 > **Filled instance:** [`docs/07-api-flows.md`](docs/07-api-flows.md) — all `/api` endpoints
-> (auth, meta, admin config/tracks/sponsors/users, matching, projects, judging) with payloads,
-> auth, error codes, and the related §4 UI action. Source: `backend/src/routes/*`.
+> (auth, global meta/users, hackathons CRUD + reset/delete, and hackathon-scoped tracks,
+> sponsors, judges, matching, projects, judging) with payloads, auth, error codes, and the
+> related §4 UI action. Source: `backend/src/routes/*`.
 
 ### Endpoint: `<METHOD /path>`
 - **Purpose:**
@@ -564,7 +568,8 @@ Repeat one subsection per **Workflow** from §4 (same order as in §4 when possi
 
 | Date | Version | Change Type | Description | Updated By |
 |------|---------|-------------|-------------|------------|
-| 2026-06-15 | v1.0.0 | Feature | Initial build — auth/admin/config, team matching, submission (one project/person), judging rubric (/100), SQLite↔Neon adapter, OpenAI embeddings w/ offline fallback, 40 tests, full §1–§13 docs. | Initial author |
+| 2026-06-15 | v2.0.0 | Feature | SUBLET branding + multi-hackathon model (per-hackathon details/tracks/sponsors/judges/matching/projects), per-hackathon judge access, admin reset + delete-hackathon, legacy auto-migration into "Ziward Hackathon", full professional UI redesign, 51 tests. | Update |
+| 2026-06-15 | v1.0.0 | Feature | Initial build — auth/admin/config, team matching, submission (one project/person), judging rubric (/100), SQLite↔Neon adapter, OpenAI w/ offline fallback, 40 tests, full §1–§13 docs. | Initial author |
 
 ---
 

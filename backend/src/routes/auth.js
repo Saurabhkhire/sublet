@@ -28,11 +28,10 @@ router.post('/register', async (req, res) => {
     password_hash: hash,
     linkedin: linkedin || '',
     role: 'user',
-    is_judge: 0,
     created_at: new Date().toISOString(),
   });
   const user = { id, email, role: 'user' };
-  return res.status(201).json({ token: signToken(user), user: { ...user, is_judge: 0, linkedin: linkedin || '' } });
+  return res.status(201).json({ token: signToken(user), user: { ...user, linkedin: linkedin || '' } });
 });
 
 router.post('/login', async (req, res) => {
@@ -46,13 +45,7 @@ router.post('/login', async (req, res) => {
   }
   return res.json({
     token: signToken(user),
-    user: {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      is_judge: user.is_judge,
-      linkedin: user.linkedin,
-    },
+    user: { id: user.id, email: user.email, role: user.role, linkedin: user.linkedin },
   });
 });
 

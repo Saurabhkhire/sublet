@@ -1,29 +1,34 @@
-# Hackathon Platform
+# SUBLET
 
-Project submission, team matching and judging for a hackathon.
+A **multi-hackathon** platform — team matching, project submission and judging, one hackathon at a time.
 
-- **Frontend:** React + Vite
+- **Frontend:** React + Vite (SUBLET branding, professional light UI)
 - **Backend:** Node.js + Express
 - **Database:** SQLite locally (built into Node — no native build), Neon/Postgres when deployed
-- **LLM:** OpenAI embeddings for team-matching similarity (with an offline fallback)
+- **LLM:** OpenAI `gpt-4o-mini` for team-matching idea similarity (with an offline fallback)
 
 ## Features
 
 - **Register / Login** with email, password, LinkedIn (JWT auth).
-- **Admin account** (default `admin123` / `admin123`, configurable via `ADMIN_EMAIL` /
-  `ADMIN_PASSWORD`) with full control: edit hackathon name &
-  details, manage Tracks and Sponsors (multiple entries), add/remove users, and choose who
-  can view & judge projects.
-- **Team matching (optional):** people pick role, tracks, sponsors and describe what they
-  plan to build. Admin triggers matching into teams of ≤ 4, scored on track/sponsor overlap,
-  AI similarity of the idea, and **role diversity**. Re-running only matches new people.
-- **Project submission:** name, description, demo video, git link, team members, sponsors,
-  tracks. Each person can be on **only one** project.
-- **Judging:** selected judges score projects across 6 criteria (total /100) with comments,
-  and can filter projects by sponsor. Admin sees all scores and averages.
-- **Docs:** full §1–§13 product docs in [`docs/`](docs/README.md) (architecture, UI workflows,
-  DB, API, tests, change log) per the rules in [`project.md`](project.md).
-- **Tests:** positive **and** negative test case for every workflow (40 tests).
+- **Multi-hackathon:** the admin creates hackathons; everything (details, tracks, sponsors,
+  judges, matching, projects, scores) is **scoped per hackathon**.
+- **Admin** (default `admin123` / `admin123`, configurable via `ADMIN_EMAIL` / `ADMIN_PASSWORD`):
+  create hackathons, edit name & details, manage Tracks and Sponsors (multiple entries),
+  add/remove global users, pick who can **view & judge** each hackathon, run matching, and
+  **reset** a hackathon (delete all projects + judging data) or delete it entirely.
+- **Team matching (optional):** people pick role, tracks, sponsors and describe what they plan to
+  build. Admin triggers matching into teams of ≤ 4, scored on track/sponsor overlap, AI similarity
+  of the idea, and **role diversity**. Re-running only matches new people.
+- **Project submission:** name, description, demo video, git link, team members, sponsors, tracks.
+  Each person can be on **only one** project **per hackathon**.
+- **Judging:** selected judges score projects across 6 criteria (total /100) with comments, and
+  filter by sponsor. Admin sees all scores and averages.
+- **Docs:** full §1–§13 product docs in [`docs/`](docs/README.md) per the rules in
+  [`project.md`](project.md).
+- **Tests:** positive **and** negative test case for every workflow (51 tests).
+
+> **Upgrading an existing local DB?** On first boot the backend auto-migrates a pre-multi-hackathon
+> SQLite database, moving all existing data into a hackathon named **"Ziward Hackathon"**.
 
 ## Quick start
 
@@ -75,7 +80,7 @@ No code changes are needed — `backend/src/db.js` switches engines based on `DA
 ## Tests
 
 ```bash
-npm test          # runs the backend test suite (40 tests)
+npm test          # runs the backend test suite (51 tests)
 ```
 
 Covers every workflow with positive and negative cases — see [`docs/11-test-cases.md`](docs/11-test-cases.md).
@@ -86,22 +91,22 @@ Covers every workflow with positive and negative cases — see [`docs/11-test-ca
 backend/
   src/
     db.js              # SQLite/Postgres adapter
-    schema.js          # dialect-aware schema
-    seed.js            # admin account + sample data
-    server.js          # express app
+    schema.js          # dialect-aware multi-hackathon schema
+    migrate.js         # legacy DB upgrade -> "Ziward Hackathon"
+    seed.js            # admin account + sample hackathon
+    server.js          # express app (mounts nested hackathon routers)
     index.js           # entry point (listen)
     constants.js       # roles + scoring criteria
-    middleware/auth.js # JWT + role guards
-    routes/            # auth, admin, matching, projects, judging, meta
-    services/          # llm.js (embeddings), matchingEngine.js
+    middleware/auth.js # JWT + role + per-hackathon judge guards
+    routes/            # auth, admin(users), meta, hackathons, matching, projects
+    services/          # llm.js (gpt-4o-mini), matchingEngine.js
   tests/               # node:test suites (positive + negative)
 frontend/
   src/
-    pages/             # Login, Register, Dashboard, TeamMatching, Submission, Judging, AdminPanel
-    components/        # Nav, MultiSelect
+    pages/             # Login, Register, Hackathons, Users, HackathonLayout,
+                       #   Overview, TeamMatching, Submission, Judging, AdminPanel
+    components/        # TopNav, MultiSelect
     api.js, auth.jsx   # fetch wrapper + auth context
-docs/
-  ARCHITECTURE.md
-  WORKFLOWS.md
+docs/                  # §1–§13 product docs (.md + .docx)
 ```
 # sublet

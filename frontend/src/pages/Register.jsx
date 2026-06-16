@@ -5,39 +5,49 @@ import { useAuth } from '../auth.jsx';
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [linkedin, setLinkedin] = useState('');
+  const [form, setForm] = useState({ email: '', password: '', linkedin: '' });
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   async function onSubmit(e) {
     e.preventDefault();
-    setError('');
+    setError(''); setBusy(true);
     try {
-      await register(email, password, linkedin);
+      await register(form.email, form.password, form.linkedin);
       navigate('/');
     } catch (err) {
       setError(err.message);
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <div className="container narrow">
-      <h1>Register</h1>
-      <form onSubmit={onSubmit} className="card">
-        <label>Email
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
-        </label>
-        <label>Password
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="min 6 characters" />
-        </label>
-        <label>LinkedIn URL
-          <input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} placeholder="https://linkedin.com/in/you" />
-        </label>
-        {error && <p className="error">{error}</p>}
-        <button type="submit">Create account</button>
-      </form>
-      <p className="muted">Already have an account? <Link to="/login">Log in</Link></p>
+    <div className="center-screen">
+      <div className="auth-card">
+        <div className="auth-brand">
+          <div className="brand" style={{ fontSize: 26, justifyContent: 'center' }}><span className="brand-dot" />SUBLET</div>
+          <p className="muted" style={{ marginTop: 6 }}>Create your participant account</p>
+        </div>
+        <form onSubmit={onSubmit} className="card" style={{ boxShadow: 'var(--shadow)' }}>
+          <h2 style={{ marginTop: 0 }}>Sign up</h2>
+          <label>Email
+            <input value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="you@example.com" autoFocus />
+          </label>
+          <label>Password
+            <input type="password" value={form.password} onChange={(e) => set('password', e.target.value)} placeholder="At least 6 characters" />
+          </label>
+          <label>LinkedIn URL <span className="faint small">(optional)</span>
+            <input value={form.linkedin} onChange={(e) => set('linkedin', e.target.value)} placeholder="https://linkedin.com/in/you" />
+          </label>
+          {error && <p className="error">{error}</p>}
+          <button type="submit" disabled={busy} style={{ width: '100%', marginTop: 8 }}>{busy ? 'Creating…' : 'Create account'}</button>
+          <p className="muted small" style={{ textAlign: 'center', marginBottom: 0, marginTop: 16 }}>
+            Already registered? <Link to="/login">Log in</Link>
+          </p>
+        </form>
+      </div>
     </div>
   );
 }

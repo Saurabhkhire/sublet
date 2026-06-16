@@ -1,10 +1,12 @@
 # 3) System Architecture
 
 ## 3.1 High-Level Architecture Description
-A React single-page app talks to a stateless Express JSON API over `/api`. The API
-authenticates requests with JWTs and authorizes by role (`user` / `admin`) and the `is_judge`
-flag. All persistence goes through one data-access boundary (`db.js`) that selects SQLite or
-Postgres/Neon by configuration. Team matching is a backend service that combines structured
+A React single-page app (branded **SUBLET**) talks to a stateless Express JSON API over `/api`.
+The API authenticates with JWTs and authorizes by global role (`user` / `admin`) plus
+**per-hackathon** judge access (`hackathon_judges`). Most resources are nested under
+`/api/hackathons/:hid/…` and scoped to that hackathon by `hackathonContext` middleware. All
+persistence goes through one data-access boundary (`db.js`) that selects SQLite or Postgres/Neon
+by configuration. Team matching is a backend service that combines structured
 overlap (tracks/sponsors) with text similarity from an embedding service (OpenAI or an offline
 fallback). There is no caching layer or queue; matching runs synchronously on demand.
 

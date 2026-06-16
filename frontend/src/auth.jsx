@@ -27,24 +27,21 @@ export function AuthProvider({ children }) {
     setUser(data.user);
     return data.user;
   }
-
   async function register(email, password, linkedin) {
     const data = await api('POST', '/api/auth/register', { email, password, linkedin });
     setToken(data.token);
     setUser(data.user);
     return data.user;
   }
-
   function logout() {
     setToken(null);
     setUser(null);
   }
 
   const isAdmin = user?.role === 'admin';
-  const isJudge = isAdmin || user?.is_judge === 1;
 
   return (
-    <AuthCtx.Provider value={{ user, loading, login, register, logout, isAdmin, isJudge }}>
+    <AuthCtx.Provider value={{ user, loading, login, register, logout, isAdmin }}>
       {children}
     </AuthCtx.Provider>
   );

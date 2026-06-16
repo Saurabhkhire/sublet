@@ -1,6 +1,6 @@
 # 13) Document Generation Checklist
 
-State after the initial v1.0.0 build.
+State after the v2.0.0 update (SUBLET, multi-hackathon, reset, UI redesign).
 
 - [x] **Meta rules:** `project.md` §1–§13 filled from the implementation; N/A sections justified
   (agents §9, some EventHack-only items).

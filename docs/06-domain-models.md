@@ -8,20 +8,25 @@ by the data layer plus the in-memory shapes used by the matching engine. Fields 
   - `id: integer`
   - `email: string`
   - `linkedin: string`
-  - `role: 'user' | 'admin'`
-  - `is_judge: 0 | 1`
+  - `role: 'user' | 'admin'` (judge access is per-hackathon, not a field here)
   - `created_at: string (ISO)`
   - `password_hash: string` (server-only; never returned to the client)
 
-### Model: `Config`
-- **Fields:** `id: 1`, `hackathon_name: string`, `details: string`
+### Model: `Hackathon`
+- **Fields:** `id: integer`, `name: string`, `details: string`, `created_by: integer`,
+  `created_at: string`. API list shape adds `project_count`, `judge_count`, `is_judge`.
+
+### Model: `HackathonJudge`
+- **Fields:** `id: integer`, `hackathon_id: integer`, `user_id: integer` — a user granted
+  view+judge access to one hackathon.
 
 ### Model: `Track` / `Sponsor`
-- **Fields:** `id: integer`, `name: string`
+- **Fields:** `id: integer`, `hackathon_id: integer`, `name: string`
 
 ### Model: `MatchingProfile`
 - **Fields:**
   - `id: integer`
+  - `hackathon_id: integer`
   - `user_id: integer`
   - `role: string`
   - `plan_to_build: string`
@@ -32,12 +37,13 @@ by the data layer plus the in-memory shapes used by the matching engine. Fields 
   - `created_at: string`
 
 ### Model: `MatchingRun`
-- **Fields:** `id: integer`, `created_at: string`, `group_count: integer`,
-  `people_count: integer`
+- **Fields:** `id: integer`, `hackathon_id: integer`, `created_at: string`,
+  `group_count: integer`, `people_count: integer`
 
 ### Model: `Project` (detail shape returned by the API)
 - **Fields:**
   - `id: integer`
+  - `hackathon_id: integer`
   - `name: string`
   - `short_description: string`
   - `demo_video_link: string`
