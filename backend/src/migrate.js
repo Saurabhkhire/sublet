@@ -20,7 +20,18 @@ async function columnNames(table) {
 // Rebuilds the scores table when it still has the old 6-category columns. The scoring model
 // changed (5 categories each 0–100, total = their average), so old rows are not carried over.
 export async function migrateScores() {
-  if (isPg) return;
+  if (isPg) {
+    // For Postgres: drop old columns and add new ones using IF EXISTS / IF NOT EXISTS.
+    await run('ALTER TABLE scores DROP COLUMN IF EXISTS technical');
+    await run('ALTER TABLE scores DROP COLUMN IF EXISTS code_quality');
+    await run('ALTER TABLE scores DROP COLUMN IF EXISTS functionality');
+    await run('ALTER TABLE scores DROP COLUMN IF EXISTS ux');
+    await run('ALTER TABLE scores ADD COLUMN IF NOT EXISTS execution INTEGER NOT NULL DEFAULT 0');
+    await run('ALTER TABLE scores ADD COLUMN IF NOT EXISTS impact INTEGER NOT NULL DEFAULT 0');
+    await run('ALTER TABLE scores ADD COLUMN IF NOT EXISTS implementation INTEGER NOT NULL DEFAULT 0');
+    await run('ALTER TABLE scores ALTER COLUMN total TYPE REAL');
+    return;
+  }
   if (!(await tableExists('scores'))) return;
   const cols = await columnNames('scores');
   if (cols.includes('execution')) return; // already on the new schema
