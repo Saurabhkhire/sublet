@@ -43,9 +43,6 @@ export default function Login() {
           <p className="muted small" style={{ textAlign: 'center', marginBottom: 0, marginTop: 16 }}>
             No account? <Link to="/register">Create one</Link>
           </p>
-          <p className="faint small" style={{ textAlign: 'center', marginBottom: 0 }}>
-            Admin demo: <span className="kbd">admin123</span> / <span className="kbd">admin123</span>
-          </p>
         </form>
       </div>
     </div>
