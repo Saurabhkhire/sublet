@@ -37,3 +37,8 @@ externalPort = 3000
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["node", "--disable-warning=ExperimentalWarning", "backend/src/index.js"]
+build = ["bash", "-c", "npm --prefix frontend install && npm --prefix frontend run build && npm --prefix backend install"]
