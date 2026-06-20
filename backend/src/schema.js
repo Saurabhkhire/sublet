@@ -20,6 +20,12 @@ export async function createSchema() {
       id ${PK},
       name TEXT NOT NULL,
       details TEXT NOT NULL DEFAULT '',
+      support_info TEXT NOT NULL DEFAULT '',
+      schedule TEXT NOT NULL DEFAULT '',
+      event_date TEXT NOT NULL DEFAULT '',
+      start_time TEXT NOT NULL DEFAULT '',
+      end_time TEXT NOT NULL DEFAULT '',
+      location TEXT NOT NULL DEFAULT '',
       created_by INTEGER,
       created_at TEXT NOT NULL DEFAULT '1970-01-01'
     );
@@ -27,13 +33,17 @@ export async function createSchema() {
     CREATE TABLE IF NOT EXISTS tracks (
       id ${PK},
       hackathon_id INTEGER NOT NULL,
-      name TEXT NOT NULL
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS sponsors (
       id ${PK},
       hackathon_id INTEGER NOT NULL,
-      name TEXT NOT NULL
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      access_instructions TEXT NOT NULL DEFAULT '',
+      prizes TEXT NOT NULL DEFAULT ''
     );
 
     -- Users the admin has selected (per hackathon) to view project details and judge.
@@ -101,12 +111,12 @@ export async function createSchema() {
       project_id INTEGER NOT NULL,
       judge_id INTEGER NOT NULL,
       presentation INTEGER NOT NULL DEFAULT 0,
-      technical INTEGER NOT NULL DEFAULT 0,
-      code_quality INTEGER NOT NULL DEFAULT 0,
-      functionality INTEGER NOT NULL DEFAULT 0,
+      execution INTEGER NOT NULL DEFAULT 0,
       innovation INTEGER NOT NULL DEFAULT 0,
-      ux INTEGER NOT NULL DEFAULT 0,
-      total INTEGER NOT NULL DEFAULT 0,
+      impact INTEGER NOT NULL DEFAULT 0,
+      implementation INTEGER NOT NULL DEFAULT 0,
+      total REAL NOT NULL DEFAULT 0,
+      investment REAL NOT NULL DEFAULT 0,
       comments TEXT NOT NULL DEFAULT '',
       UNIQUE (project_id, judge_id)
     );

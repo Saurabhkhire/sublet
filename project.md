@@ -148,13 +148,14 @@ On **Register** (and optionally after verify-email), show **Put as sponsor**, **
 
 ### 1.1 Project Summary
 - **Project Name:** SUBLET
-- **Version / Update Tag:** v2.0.0
-- **Date:** 2026-06-15
+- **Version / Update Tag:** v2.7.0
+- **Date:** 2026-06-19
 - **Owner / Team:** Hackathon organizers
 - **Short Description:** A **multi-hackathon** platform. Admins create hackathons, each with its
   own details, tracks, sponsors, selected judges and matching run. Within a hackathon,
   participants opt into team matching, submit one project each, and selected judges score them on
-  a 6-criteria rubric. Admins can reset a hackathon (delete all projects + judging) or delete it.
+  five categories (Presentation, Execution, Innovation, Impact, Implementation — each /100, total =
+  their average) via a ranked leaderboard. Admins can reset a hackathon or delete it.
 
 ### 1.2 Problem Statement
 - **Problem:** Running a hackathon needs team formation, project submission, controlled
@@ -568,6 +569,17 @@ Repeat one subsection per **Workflow** from §4 (same order as in §4 when possi
 
 | Date | Version | Change Type | Description | Updated By |
 |------|---------|-------------|-------------|------------|
+| 2026-06-19 | v2.7.0 | Feature | Hackathons capture event date, start/end time and location (create + admin edit) shown in an Overview "When & Where" card; projects can be submitted **only on the hackathon's event date** (API rejects off-day with 403; Submit page disables off-day). Legacy/no-date hackathons unrestricted; columns auto-migrated; 73 tests. | Update |
+| 2026-06-16 | v2.6.0 | Feature | Richer hackathons — Community & Support (Discord), Schedule, track descriptions, per-sponsor description/Tool-Access-&-Credits/Prizes (admin-editable); public Overview info display incl. judges with LinkedIn; 71 tests. | Update |
+| 2026-06-16 | v2.5.1 | Fix | Demo seed scripts now write directly to the DB (no backend server needed) via `backend/src/seedData.js`; 67 tests. | Update |
+| 2026-06-16 | v2.5.0 | Feature | Account settings page — users edit their own LinkedIn & password (`PUT /api/auth/profile`); admin Delete-all-users confirmed; 66 tests. | Update |
+| 2026-06-16 | v2.4.2 | Fix/Feature | Judging alignment fixes; Results & Investments tabs show Tracks/Sponsors columns and a click-to-open details popup (demo + GitHub links, tracks, sponsors, team, category averages). | Update |
+| 2026-06-16 | v2.4.1 | Feature | Investment input gains unit options (Exact $, Thousand, Lakh, Million, Crore, Billion) with live preview; compact amounts on the leaderboard. | Update |
+| 2026-06-15 | v2.4.0 | Feature | Judging investment feature — judges record a would-be investment per project; new Investments tab ranks projects by total invested across judges; 61 tests. | Update |
+| 2026-06-15 | v2.3.0 | Feature | Judging split into two tabs (Score / Results-&-averages leaderboard with per-category averages + `my_score`); app-wide light/dark theme toggle; UI polish. | Update |
+| 2026-06-15 | v2.2.1 | Change | LinkedIn URL required at registration; 59 tests. | Update |
+| 2026-06-15 | v2.2.0 | Feature | Judging redesign — leaderboard by average score, big Demo/Git links, tracks & sponsors shown; scoring changed to 5 categories (Presentation/Execution/Innovation/Impact/Implementation, each /100, total = average); 58 tests. | Update |
+| 2026-06-15 | v2.1.0 | Feature | Demo-data seed scripts; admin **Delete all users**; matching opt-ins are now **visible to each other** to find teammates; 57 tests. | Update |
 | 2026-06-15 | v2.0.0 | Feature | SUBLET branding + multi-hackathon model (per-hackathon details/tracks/sponsors/judges/matching/projects), per-hackathon judge access, admin reset + delete-hackathon, legacy auto-migration into "Ziward Hackathon", full professional UI redesign, 51 tests. | Update |
 | 2026-06-15 | v1.0.0 | Feature | Initial build — auth/admin/config, team matching, submission (one project/person), judging rubric (/100), SQLite↔Neon adapter, OpenAI w/ offline fallback, 40 tests, full §1–§13 docs. | Initial author |
 

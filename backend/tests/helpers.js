@@ -47,8 +47,10 @@ export async function bootTestServer(label) {
   return { api, base, cleanup };
 }
 
-export async function registerUser(api, email, password = 'secret123', linkedin = '') {
-  const res = await api('POST', '/api/auth/register', { body: { email, password, linkedin } });
+export async function registerUser(api, email, password = 'secret123', linkedin) {
+  // LinkedIn is mandatory at registration; default to a valid URL for test users.
+  const profile = linkedin || `https://linkedin.com/in/${email.split('@')[0]}`;
+  const res = await api('POST', '/api/auth/register', { body: { email, password, linkedin: profile } });
   return res.body?.token;
 }
 

@@ -1,18 +1,31 @@
 import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { get, post } from '../api.js';
+import { useAuth } from '../auth.jsx';
 import MultiSelect from '../components/MultiSelect.jsx';
 
 export default function TeamMatching() {
   const { meta, hid } = useOutletContext();
+  const { user } = useAuth();
   const [existing, setExisting] = useState(null);
   const [group, setGroup] = useState([]);
   const [role, setRole] = useState('');
   const [plan, setPlan] = useState('');
   const [tracks, setTracks] = useState([]);
   const [sponsors, setSponsors] = useState([]);
+  const [participants, setParticipants] = useState([]);
+  const [canSeeOthers, setCanSeeOthers] = useState(false);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
+
+  const trackName = (id) => meta.tracks.find((t) => t.id === id)?.name;
+  const sponsorName = (id) => meta.sponsors.find((s) => s.id === id)?.name;
+
+  function loadParticipants() {
+    get(`/api/hackathons/${hid}/matching/participants`)
+      .then((rows) => { setParticipants(rows); setCanSeeOthers(true); })
+      .catch(() => setCanSeeOthers(false));
+  }
 
   useEffect(() => {
     get(`/api/hackathons/${hid}/matching/me`).then((d) => {
@@ -25,6 +38,7 @@ export default function TeamMatching() {
         setGroup(d.group || []);
       }
     });
+    loadParticipants();
   }, [hid]);
 
   const matched = existing?.matched === 1;
@@ -36,8 +50,11 @@ export default function TeamMatching() {
       await post(`/api/hackathons/${hid}/matching/profile`, { role, plan_to_build: plan, tracks, sponsors });
       setMsg('Saved! You\'ll be placed in a team when the admin runs matching.');
       setExisting({ ...(existing || {}), role, plan_to_build: plan, tracks, sponsors, matched: 0 });
+      loadParticipants(); // now visible to / including you
     } catch (err) { setError(err.message); }
   }
+
+  const others = participants.filter((p) => p.user_id !== user.id);
 
   return (
     <div className="stack">
@@ -46,6 +63,7 @@ export default function TeamMatching() {
         <p className="muted">
           Tell us your role, the tracks/sponsors you're interested in, and what you plan to build.
           We form teams of up to 4 using track &amp; sponsor overlap, AI similarity of your idea, and a healthy mix of roles.
+          Everyone who opts in can browse the others below to find teammates directly.
         </p>
       </div>
 
@@ -83,6 +101,37 @@ export default function TeamMatching() {
         {msg && <p className="success" style={{ marginTop: 14 }}>{msg}</p>}
         {!matched && <button type="submit" style={{ marginTop: 16 }}>{existing ? 'Update profile' : 'Opt in'}</button>}
       </form>
+
+      <div>
+        <div className="spread">
+          <h2 style={{ margin: 0 }}>Participants looking for a team</h2>
+          {canSeeOthers && <span className="badge">{others.length} {others.length === 1 ? 'person' : 'people'}</span>}
+        </div>
+        {!canSeeOthers ? (
+          <div className="card empty"><p>Opt into team matching above to see everyone else who's looking for a team.</p></div>
+        ) : others.length === 0 ? (
+          <div className="card empty"><p>Nobody else has opted in yet — check back soon.</p></div>
+        ) : (
+          <div className="grid">
+            {others.map((p) => (
+              <div key={p.user_id} className="card">
+                <div className="spread">
+                  <strong>{p.role}</strong>
+                  {p.matched ? <span className="badge green">Team #{p.group_id}</span> : <span className="badge amber">Looking</span>}
+                </div>
+                <p className="muted small" style={{ minHeight: 36 }}>{p.plan_to_build}</p>
+                <div className="multiselect">
+                  {p.tracks.map((id) => trackName(id) && <span key={`t${id}`} className="badge accent">{trackName(id)}</span>)}
+                  {p.sponsors.map((id) => sponsorName(id) && <span key={`s${id}`} className="badge">{sponsorName(id)}</span>)}
+                </div>
+                <p className="small" style={{ marginTop: 10, marginBottom: 0 }}>
+                  {p.email}{p.linkedin && <> · <a href={p.linkedin} target="_blank" rel="noreferrer">LinkedIn</a></>}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

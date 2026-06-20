@@ -8,10 +8,8 @@ export default function AdminPanel() {
     <div className="stack">
       <h1>Admin · {meta.hackathon.name}</h1>
       <DetailsSection hid={hid} meta={meta} reload={reload} />
-      <div className="grid">
-        <ListSection title="Tracks" hid={hid} kind="tracks" reload={reload} />
-        <ListSection title="Sponsors" hid={hid} kind="sponsors" reload={reload} />
-      </div>
+      <TracksEditor hid={hid} reload={reload} />
+      <SponsorsEditor hid={hid} reload={reload} />
       <JudgesSection hid={hid} />
       <MatchingSection hid={hid} />
       <DangerZone hid={hid} name={meta.hackathon.name} />
@@ -20,7 +18,11 @@ export default function AdminPanel() {
 }
 
 function DetailsSection({ hid, meta, reload }) {
-  const [form, setForm] = useState({ name: meta.hackathon.name, details: meta.hackathon.details });
+  const h = meta.hackathon;
+  const [form, setForm] = useState({
+    name: h.name, details: h.details, support_info: h.support_info || '', schedule: h.schedule || '',
+    event_date: h.event_date || '', start_time: h.start_time || '', end_time: h.end_time || '', location: h.location || '',
+  });
   const [msg, setMsg] = useState('');
   async function save(e) {
     e.preventDefault();
@@ -28,54 +30,125 @@ function DetailsSection({ hid, meta, reload }) {
     await reload();
     setMsg('Saved!'); setTimeout(() => setMsg(''), 1500);
   }
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   return (
     <section className="card">
       <h3 style={{ marginTop: 0 }}>Hackathon details</h3>
       <form onSubmit={save}>
-        <label>Name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
-        <label>Details<textarea rows={3} value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} /></label>
+        <label>Name<input value={form.name} onChange={(e) => set('name', e.target.value)} /></label>
+        <label>Description<textarea rows={3} value={form.details} onChange={(e) => set('details', e.target.value)} /></label>
+        <label>Date <span className="faint small">(projects can only be submitted on this day)</span>
+          <input type="date" value={form.event_date} onChange={(e) => set('event_date', e.target.value)} />
+        </label>
+        <div className="row" style={{ gap: 16 }}>
+          <label style={{ flex: 1, minWidth: 110 }}>Start time
+            <input type="time" value={form.start_time} onChange={(e) => set('start_time', e.target.value)} />
+          </label>
+          <label style={{ flex: 1, minWidth: 110 }}>End time
+            <input type="time" value={form.end_time} onChange={(e) => set('end_time', e.target.value)} />
+          </label>
+        </div>
+        <label>Location
+          <input value={form.location} onChange={(e) => set('location', e.target.value)} placeholder="Venue address or online link" />
+        </label>
+        <label>Community &amp; Support <span className="faint small">(Discord/Slack invite & how to get help — shown to everyone)</span>
+          <textarea rows={2} value={form.support_info} onChange={(e) => set('support_info', e.target.value)} placeholder="https://discord.gg/… — join for announcements and support" />
+        </label>
+        <label>Schedule
+          <textarea rows={3} value={form.schedule} onChange={(e) => set('schedule', e.target.value)} placeholder="Kickoff, checkpoints, submission deadline, judging…" />
+        </label>
         <div className="row"><button type="submit">Save</button>{msg && <span className="success">{msg}</span>}</div>
       </form>
     </section>
   );
 }
 
-function ListSection({ title, hid, kind, reload }) {
-  const base = `/api/hackathons/${hid}/${kind}`;
+function TracksEditor({ hid, reload }) {
+  const base = `/api/hackathons/${hid}/tracks`;
   const [items, setItems] = useState([]);
-  const [name, setName] = useState('');
+  const [draft, setDraft] = useState({ name: '', description: '' });
   function load() { get(base).then(setItems); }
   useEffect(load, [hid]);
+  function setItem(id, k, v) { setItems((arr) => arr.map((it) => (it.id === id ? { ...it, [k]: v } : it))); }
   async function add(e) {
     e.preventDefault();
-    if (!name.trim()) return;
-    await post(base, { name }); setName(''); load(); reload();
+    if (!draft.name.trim()) return;
+    await post(base, draft); setDraft({ name: '', description: '' }); load(); reload();
   }
-  async function rename(id, current) {
-    const v = prompt(`Rename`, current);
-    if (v && v.trim()) { await put(`${base}/${id}`, { name: v.trim() }); load(); reload(); }
-  }
-  async function remove(id) {
-    if (confirm('Delete this entry?')) { await del(`${base}/${id}`); load(); reload(); }
-  }
+  async function save(it) { await put(`${base}/${it.id}`, { name: it.name, description: it.description }); load(); reload(); }
+  async function remove(id) { if (confirm('Delete this track?')) { await del(`${base}/${id}`); load(); reload(); } }
   return (
     <section className="card">
-      <h3 style={{ marginTop: 0 }}>{title} <span className="faint small">({items.length})</span></h3>
-      <div className="stack" style={{ marginBottom: 14 }}>
+      <h3 style={{ marginTop: 0 }}>Tracks (themes) <span className="faint small">({items.length})</span></h3>
+      <div className="stack">
         {items.map((it) => (
-          <div key={it.id} className="spread" style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-            <span>{it.name}</span>
-            <span>
-              <button className="link" onClick={() => rename(it.id, it.name)}>edit</button>
-              <button className="link danger" onClick={() => remove(it.id)}>delete</button>
-            </span>
+          <div key={it.id} className="card flat" style={{ background: 'var(--surface-2)', marginBottom: 0 }}>
+            <div className="row" style={{ gap: 8, alignItems: 'flex-start' }}>
+              <input style={{ flex: 1, minWidth: 160 }} value={it.name} onChange={(e) => setItem(it.id, 'name', e.target.value)} placeholder="Track name" />
+              <button className="sm" onClick={() => save(it)}>Save</button>
+              <button className="sm danger outline" onClick={() => remove(it.id)}>Delete</button>
+            </div>
+            <textarea rows={2} value={it.description || ''} onChange={(e) => setItem(it.id, 'description', e.target.value)} placeholder="Track description (what this theme is about)" />
           </div>
         ))}
-        {items.length === 0 && <span className="faint small">None yet.</span>}
+        {items.length === 0 && <span className="faint small">No tracks yet.</span>}
       </div>
-      <form onSubmit={add} className="row">
-        <input style={{ flex: 1 }} value={name} onChange={(e) => setName(e.target.value)} placeholder={`Add ${title.slice(0, -1).toLowerCase()}`} />
-        <button type="submit">Add</button>
+      <form onSubmit={add} style={{ marginTop: 14 }}>
+        <div className="row" style={{ gap: 8 }}>
+          <input style={{ flex: 1 }} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="New track name" />
+          <button type="submit">Add track</button>
+        </div>
+        <textarea rows={2} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="New track description (optional)" />
+      </form>
+    </section>
+  );
+}
+
+function SponsorsEditor({ hid, reload }) {
+  const base = `/api/hackathons/${hid}/sponsors`;
+  const [items, setItems] = useState([]);
+  const empty = { name: '', description: '', access_instructions: '', prizes: '' };
+  const [draft, setDraft] = useState(empty);
+  function load() { get(base).then(setItems); }
+  useEffect(load, [hid]);
+  function setItem(id, k, v) { setItems((arr) => arr.map((it) => (it.id === id ? { ...it, [k]: v } : it))); }
+  async function add(e) {
+    e.preventDefault();
+    if (!draft.name.trim()) return;
+    await post(base, draft); setDraft(empty); load(); reload();
+  }
+  async function save(it) {
+    await put(`${base}/${it.id}`, { name: it.name, description: it.description, access_instructions: it.access_instructions, prizes: it.prizes });
+    load(); reload();
+  }
+  async function remove(id) { if (confirm('Delete this sponsor?')) { await del(`${base}/${id}`); load(); reload(); } }
+  return (
+    <section className="card">
+      <h3 style={{ marginTop: 0 }}>Sponsors <span className="faint small">({items.length})</span></h3>
+      <p className="muted small" style={{ marginTop: 0 }}>Each sponsor has a description, tool access &amp; credits instructions, and prizes — all shown to participants.</p>
+      <div className="stack">
+        {items.map((it) => (
+          <div key={it.id} className="card flat" style={{ background: 'var(--surface-2)', marginBottom: 0 }}>
+            <div className="row" style={{ gap: 8 }}>
+              <input style={{ flex: 1, minWidth: 160 }} value={it.name} onChange={(e) => setItem(it.id, 'name', e.target.value)} placeholder="Sponsor name" />
+              <button className="sm" onClick={() => save(it)}>Save</button>
+              <button className="sm danger outline" onClick={() => remove(it.id)}>Delete</button>
+            </div>
+            <label className="small">Description<textarea rows={2} value={it.description || ''} onChange={(e) => setItem(it.id, 'description', e.target.value)} placeholder="What the sponsor does / their challenge" /></label>
+            <label className="small">Tool Access &amp; Credits<textarea rows={2} value={it.access_instructions || ''} onChange={(e) => setItem(it.id, 'access_instructions', e.target.value)} placeholder="How to access their tool, API keys, credits…" /></label>
+            <label className="small">Prizes<textarea rows={2} value={it.prizes || ''} onChange={(e) => setItem(it.id, 'prizes', e.target.value)} placeholder="Prizes this sponsor is offering" /></label>
+          </div>
+        ))}
+        {items.length === 0 && <span className="faint small">No sponsors yet.</span>}
+      </div>
+      <form onSubmit={add} style={{ marginTop: 14 }}>
+        <div className="row" style={{ gap: 8 }}>
+          <input style={{ flex: 1 }} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="New sponsor name" />
+          <button type="submit">Add sponsor</button>
+        </div>
+        <label className="small">Description<textarea rows={2} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Description (optional)" /></label>
+        <label className="small">Tool Access &amp; Credits<textarea rows={2} value={draft.access_instructions} onChange={(e) => setDraft({ ...draft, access_instructions: e.target.value })} placeholder="Access instructions & credits (optional)" /></label>
+        <label className="small">Prizes<textarea rows={2} value={draft.prizes} onChange={(e) => setDraft({ ...draft, prizes: e.target.value })} placeholder="Prizes (optional)" /></label>
       </form>
     </section>
   );

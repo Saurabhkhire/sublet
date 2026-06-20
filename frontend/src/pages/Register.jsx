@@ -38,7 +38,7 @@ export default function Register() {
           <label>Password
             <input type="password" value={form.password} onChange={(e) => set('password', e.target.value)} placeholder="At least 6 characters" />
           </label>
-          <label>LinkedIn URL <span className="faint small">(optional)</span>
+          <label>LinkedIn URL
             <input value={form.linkedin} onChange={(e) => set('linkedin', e.target.value)} placeholder="https://linkedin.com/in/you" />
           </label>
           {error && <p className="error">{error}</p>}

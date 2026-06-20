@@ -28,6 +28,28 @@ router.post('/users', async (req, res) => {
   res.status(201).json({ id, email, linkedin: linkedin || '', role: 'user' });
 });
 
+// Delete ALL non-admin users at once (and their related data). Any project left with no
+// remaining participants is removed too, so this also clears demo/seeded projects.
+router.delete('/users', async (_req, res) => {
+  const users = await all("SELECT id FROM users WHERE role <> 'admin'");
+  for (const u of users) {
+    await run('DELETE FROM project_participants WHERE user_id = ?', [u.id]);
+    await run('DELETE FROM matching_profiles WHERE user_id = ?', [u.id]);
+    await run('DELETE FROM hackathon_judges WHERE user_id = ?', [u.id]);
+    await run('DELETE FROM scores WHERE judge_id = ?', [u.id]);
+    await run('DELETE FROM users WHERE id = ?', [u.id]);
+  }
+  // Clean up projects that now have no participants.
+  const orphans = await all('SELECT id FROM projects WHERE id NOT IN (SELECT project_id FROM project_participants)');
+  for (const p of orphans) {
+    await run('DELETE FROM scores WHERE project_id = ?', [p.id]);
+    await run('DELETE FROM project_tracks WHERE project_id = ?', [p.id]);
+    await run('DELETE FROM project_sponsors WHERE project_id = ?', [p.id]);
+    await run('DELETE FROM projects WHERE id = ?', [p.id]);
+  }
+  res.json({ ok: true, deleted_users: users.length, deleted_projects: orphans.length });
+});
+
 router.delete('/users/:id', async (req, res) => {
   const target = await get('SELECT * FROM users WHERE id = ?', [req.params.id]);
   if (!target) return res.status(404).json({ error: 'User not found' });

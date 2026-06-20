@@ -66,10 +66,56 @@ test('filter: positive - judge filters projects by sponsor', async () => {
   assert.ok(res.body.every((p) => p.sponsors.some((s) => s.id === sponsorId)));
 });
 
+test('delete: negative - non-admin cannot delete a project', async () => {
+  const all = await H.api('GET', base(), { token: adminToken });
+  const proj = all.body[0];
+  const res = await H.api('DELETE', `${base()}/${proj.id}`, { token: tokens.d });
+  assert.equal(res.status, 403);
+});
+
+test('delete: positive - admin deletes a single project', async () => {
+  const created = await H.api('POST', base(), { token: tokens.d, body: { name: 'Disposable' } });
+  const del = await H.api('DELETE', `${base()}/${created.body.id}`, { token: adminToken });
+  assert.equal(del.status, 200);
+  const gone = await H.api('GET', `${base()}/${created.body.id}`, { token: adminToken });
+  assert.equal(gone.status, 404);
+});
+
 test('isolation: positive - same person can join a project in a different hackathon', async () => {
   const hid2 = await createHackathon(H.api, adminToken, 'Second Hack');
   const res = await H.api('POST', `/api/hackathons/${hid2}/projects`, {
     token: tokens.b, body: { name: 'B in hack 2' },
   });
   assert.equal(res.status, 201); // b was on a project in hack 1, but per-hackathon allows this
+});
+
+// Today's local date as YYYY-MM-DD — must match how the server computes "the day".
+function todayLocal() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+test('submission window: negative - cannot submit before/after the hackathon day', async () => {
+  const res = await H.api('POST', '/api/hackathons', {
+    token: adminToken, body: { name: 'Dated Hack', event_date: '2000-01-01' },
+  });
+  const hid3 = res.body.id;
+  const user = await registerUser(H.api, 'dated@example.com');
+  const sub = await H.api('POST', `/api/hackathons/${hid3}/projects`, {
+    token: user, body: { name: 'Too early' },
+  });
+  assert.equal(sub.status, 403);
+});
+
+test('submission window: positive - can submit on the hackathon day', async () => {
+  const res = await H.api('POST', '/api/hackathons', {
+    token: adminToken, body: { name: 'Today Hack', event_date: todayLocal() },
+  });
+  const hid4 = res.body.id;
+  const user = await registerUser(H.api, 'today@example.com');
+  const sub = await H.api('POST', `/api/hackathons/${hid4}/projects`, {
+    token: user, body: { name: 'On time' },
+  });
+  assert.equal(sub.status, 201);
 });

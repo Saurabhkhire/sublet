@@ -32,7 +32,8 @@ backend/
   src/
     db.js               # SQLite/Postgres adapter (run/get/all/insert/exec)
     schema.js           # dialect-aware CREATE TABLE IF NOT EXISTS
-    seed.js             # admin account + config + sample tracks/sponsors
+    seed.js             # admin account + sample hackathon; runs migrations
+    seedData.js         # direct-to-DB demo seeding (used by scripts/, no server needed)
     server.js           # createApp(): express app + route mounting + error handler
     index.js            # entry point: load env, createApp, ensureSeed, listen
     constants.js        # SCORE_CRITERIA, ROLE_OPTIONS, roleBucket()

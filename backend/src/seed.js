@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { pathToFileURL } from 'node:url';
 import bcrypt from 'bcryptjs';
 import { createSchema } from './schema.js';
-import { migrateLegacy } from './migrate.js';
+import { migrateLegacy, migrateScores, migrateInvestment, migrateHackathonInfo } from './migrate.js';
 import { get, insert } from './db.js';
 
 // Idempotent: ensures the admin account exists and (on a fresh DB) seeds one sample
@@ -10,6 +10,9 @@ import { get, insert } from './db.js';
 export async function ensureSeed() {
   await createSchema();
   await migrateLegacy(); // upgrade legacy single-config DBs into the multi-hackathon schema
+  await migrateScores(); // upgrade old 6-category scores into the 5-category model
+  await migrateInvestment(); // add the per-judge investment column if missing
+  await migrateHackathonInfo(); // add support/schedule + track/sponsor description fields
 
   // Admin account — credentials come from the environment (defaults: admin123 / admin123).
   const adminEmail = process.env.ADMIN_EMAIL || 'admin123';

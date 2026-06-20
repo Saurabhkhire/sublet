@@ -8,7 +8,9 @@
     "seed": "npm --prefix backend run seed",
     "dev": "concurrently -n backend,frontend -c blue,green \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
     "start": "concurrently -n backend,frontend -c blue,green \"npm --prefix backend start\" \"npm --prefix frontend run preview\"",
-    "test": "npm --prefix backend test"
+    "test": "npm --prefix backend test",
+    "seed:users": "node scripts/seed-users.mjs",
+    "seed:projects": "node scripts/seed-projects.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

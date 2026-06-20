@@ -37,7 +37,7 @@ test('concurrency: same judge scoring twice at once — one score row', async ()
   const judgeId = await userIdByEmail(H.api, adminToken, 'b@example.com');
   await makeJudge(H.api, adminToken, hid, judgeId);
 
-  const score = { presentation: 10, technical: 10, code_quality: 10, functionality: 10, innovation: 10, ux: 10 };
+  const score = { presentation: 10, execution: 10, innovation: 10, impact: 10, implementation: 10 };
   const [s1, s2] = await Promise.all([
     H.api('POST', `${base()}/${proj.body.id}/score`, { token: tokens.b, body: { ...score, presentation: 15 } }),
     H.api('POST', `${base()}/${proj.body.id}/score`, { token: tokens.b, body: { ...score, presentation: 5 } }),

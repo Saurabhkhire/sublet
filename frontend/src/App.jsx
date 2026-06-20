@@ -5,6 +5,7 @@ import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import Hackathons from './pages/Hackathons.jsx';
 import Users from './pages/Users.jsx';
+import Profile from './pages/Profile.jsx';
 import HackathonLayout from './pages/HackathonLayout.jsx';
 import Overview from './pages/Overview.jsx';
 import TeamMatching from './pages/TeamMatching.jsx';
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
         <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
         <Route path="/" element={<Protected><Hackathons /></Protected>} />
+        <Route path="/profile" element={<Protected><Profile /></Protected>} />
         <Route path="/users" element={<Protected need="admin"><Users /></Protected>} />
         <Route path="/h/:hid" element={<Protected><HackathonLayout /></Protected>}>
           <Route index element={<Overview />} />

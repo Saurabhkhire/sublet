@@ -6,10 +6,13 @@ of `hackathon_judges` for that hackathon. Most resources are nested under
 [§4](04-ui-pages-and-workflows.md).
 
 ## Auth
-- `POST /api/auth/register` — `{email, password, linkedin?}` → `{token, user}`. `400` invalid
-  email / short password; `409` email exists. (Register / Workflow 1)
+- `POST /api/auth/register` — `{email, password, linkedin}` (all required) → `{token, user}`.
+  `400` invalid email / short password / missing LinkedIn; `409` email exists. (Register / WF 1)
 - `POST /api/auth/login` — `{email, password}` → `{token, user}`. `401` invalid. (Login / WF 1)
 - `GET /api/auth/me` — current user. `401` if no/invalid token. (Login / WF 2)
+- `PUT /api/auth/profile` — auth; `{linkedin?, password?}` updates the caller's own LinkedIn
+  and/or password → `{user}`. `400` empty LinkedIn / password < 6 / nothing to update; `401` if
+  not signed in. (Account settings)
 
 ## Global meta & users
 - `GET /api/meta` — `{roles:[…], score_criteria:[…]}` (global constants).
@@ -18,22 +21,30 @@ of `hackathon_judges` for that hackathon. Most resources are nested under
 - `POST /api/admin/users` — admin; `{email,password,linkedin?}` → `201` / `409`.
 - `DELETE /api/admin/users/:id` — admin; removes user + their participations/profiles/scores.
   `400` for the admin account. (Users page)
+- `DELETE /api/admin/users` — admin; deletes **all** non-admin users and their data, plus any
+  project left with no participants → `{deleted_users, deleted_projects}`. (Users / Delete all)
 
 ## Hackathons
 - `GET /api/hackathons` — auth; list with `{project_count, judge_count, is_judge}`.
   (Hackathons / WF 1)
-- `POST /api/hackathons` — admin; `{name, details}` → created hackathon. `400` empty name;
-  `403` non-admin. (Hackathons / WF 2)
+- `POST /api/hackathons` — admin; `{name, details, support_info?, schedule?, event_date?,
+  start_time?, end_time?, location?}` → created hackathon. `event_date` (YYYY-MM-DD) gates project
+  submission to that day. `400` empty name; `403` non-admin. (Hackathons / WF 2)
 - `GET /api/hackathons/:hid` — auth; meta:
-  `{hackathon, tracks, sponsors, roles, score_criteria, is_judge, is_admin}`. `404` unknown.
-- `PUT /api/hackathons/:hid` — admin; `{name, details}`. (Admin / WF 1)
+  `{hackathon (incl. support_info, schedule, event_date, start_time, end_time, location), tracks
+  (incl. description), sponsors (incl. description, access_instructions, prizes),
+  judges:[{id,email,linkedin}], roles, score_criteria, is_judge, is_admin}`. `404` unknown.
+- `PUT /api/hackathons/:hid` — admin; `{name, details, support_info?, schedule?, event_date?,
+  start_time?, end_time?, location?}`. (Admin / WF 1)
 - `POST /api/hackathons/:hid/reset` — admin; deletes all projects + judging scores for the
   hackathon → `{deleted_projects}`. (Admin / Reset)
 - `DELETE /api/hackathons/:hid` — admin; deletes the hackathon and all its data.
 
 ### Tracks / Sponsors (per hackathon)
 - `GET /api/hackathons/:hid/tracks` — auth. `POST` / `PUT /:id` / `DELETE /:id` — admin,
-  body `{name}`; `400` empty. Same shape for `…/sponsors`. (Admin / WF 2–3)
+  body `{name, description?}`; `400` empty name. (Admin / WF 2)
+- `GET /api/hackathons/:hid/sponsors` — auth. `POST` / `PUT /:id` / `DELETE /:id` — admin,
+  body `{name, description?, access_instructions?, prizes?}`; `400` empty name. (Admin / WF 3)
 
 ### Judges (per hackathon)
 - `GET /api/hackathons/:hid/judges` — admin; assigned judges.
@@ -44,6 +55,10 @@ of `hackathon_judges` for that hackathon. Most resources are nested under
 - `POST /api/hackathons/:hid/matching/profile` — auth; `{role, plan_to_build, tracks[], sponsors[]}`.
   `400` missing role/plan; `409` already matched. (Team Matching / WF 1)
 - `GET /api/hackathons/:hid/matching/me` — auth; `{profile, group}`.
+- `GET /api/hackathons/:hid/matching/participants` — auth; visible to anyone who has opted in
+  (or admin). Returns every opt-in's `{user_id, role, plan_to_build, tracks, sponsors, matched,
+  group_id, email, linkedin}` so participants can find teammates. `403` if the caller hasn't
+  opted in. (Team Matching / participants directory)
 - `GET /api/hackathons/:hid/matching/profiles|groups|runs` — admin views.
 - `POST /api/hackathons/:hid/matching/run` — admin; matches unmatched profiles only →
   `{run_id, groups:[{group_id, members:[{user_id, role}]}]}`. `400` if none waiting.
@@ -51,18 +66,29 @@ of `hackathon_judges` for that hackathon. Most resources are nested under
 
 ### Projects (per hackathon)
 - `POST /api/hackathons/:hid/projects` — auth; `{name, short_description, demo_video_link,
-  git_link, participants[], tracks[], sponsors[]}`. Creator auto-added. `400` no name; `409`
+  git_link, participants[], tracks[], sponsors[]}`. Creator auto-added. `400` no name; `403`
+  the hackathon has an `event_date` set and today (server local date) is not that day; `409`
   participant already on another project in this hackathon. (Submit Project / WF 1)
 - `GET /api/hackathons/:hid/projects?sponsor=<id>` — auth; judges/admins see all (optional
-  sponsor filter), others see only their own. (Submit / WF 2, Judging / WF 1)
+  sponsor filter), others see only their own. Each project includes `average_score` (avg of all
+  judges' totals, out of 100, or null), `judge_count`, `category_averages` (per-category averages
+  for the Results view), `total_investment` (sum of every judge's investment) + `investor_count`,
+  and — for judges — `my_score` and `my_investment` (the caller's own, or null).
+  (Submit / WF 2, Judging / WF 1–3)
 - `GET /api/hackathons/:hid/projects/:projectId` — auth; judge/admin or a participant. `403` /
   `404`.
+- `DELETE /api/hackathons/:hid/projects/:projectId` — admin; deletes one project and its
+  participants/tracks/sponsors/scores. `403` non-admin; `404` unknown. (admin moderation)
 
 ### Judging (per hackathon, under projects)
-- `POST /api/hackathons/:hid/projects/:projectId/score` — judge; the six criteria + `comments`;
-  atomic upsert → `{total}`. `400` out of range; `403` not a judge; `404` project. (Judging / WF 2)
+- `POST /api/hackathons/:hid/projects/:projectId/score` — judge; the five categories
+  `{presentation, execution, innovation, impact, implementation}` (each 0–100), an optional
+  `investment` (≥ 0, the judge's would-be investment), and `comments`; atomic upsert. `total` is
+  the categories' **average** → `{total, investment}`. `400` category out of range or negative
+  investment; `403` not a judge; `404` project. (Judging / WF 1)
 - `GET /api/hackathons/:hid/projects/:projectId/scores` — judge; `{scores, mine, average,
-  judge_count}` (admin sees all rows; a judge sees only their own).
+  judge_count}` where `average` is the mean of all judges' totals (admin sees every row; a judge
+  sees only their own).
 
 ### API Sequence Diagram (Text)
 ```text

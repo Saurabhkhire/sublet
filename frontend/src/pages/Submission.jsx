@@ -21,6 +21,15 @@ export default function Submission() {
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+  // Submissions are only allowed on the hackathon's event date (when one is set).
+  const eventDate = (meta.hackathon.event_date || '').trim();
+  const todayLocal = (() => {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  })();
+  const submissionOpen = !eventDate || eventDate === todayLocal;
+
   async function submit(e) {
     e.preventDefault();
     setError(''); setMsg('');
@@ -38,6 +47,12 @@ export default function Submission() {
         <h1>Submit a Project</h1>
         <p className="muted">You're automatically added as a participant. Each person can be on only one project per hackathon.</p>
       </div>
+
+      {eventDate && !submissionOpen && (
+        <div className="card" style={{ borderColor: 'var(--warn, #b45309)' }}>
+          <p style={{ margin: 0 }}>⏳ Submissions open only on the day of the hackathon (<strong>{eventDate}</strong>). Please come back then.</p>
+        </div>
+      )}
 
       <form onSubmit={submit} className="card">
         <label>Project name
@@ -63,7 +78,7 @@ export default function Submission() {
 
         {error && <p className="error" style={{ marginTop: 14 }}>{error}</p>}
         {msg && <p className="success" style={{ marginTop: 14 }}>{msg}</p>}
-        <button type="submit" style={{ marginTop: 16 }}>Submit project</button>
+        <button type="submit" style={{ marginTop: 16 }} disabled={!submissionOpen}>Submit project</button>
       </form>
 
       <h2>My Projects</h2>

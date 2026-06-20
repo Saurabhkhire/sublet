@@ -81,6 +81,20 @@ test('me: positive - matched user sees their group', async () => {
   assert.ok(res.body.group.length >= 1);
 });
 
+test('participants: positive - opted-in user sees other opted-in profiles', async () => {
+  const res = await H.api('GET', `${base()}/participants`, { token: tokens.p1 });
+  assert.equal(res.status, 200);
+  assert.ok(res.body.length >= 2);
+  // Each entry exposes role + plan + contact for finding teammates.
+  assert.ok(res.body.every((p) => p.role && 'email' in p));
+});
+
+test('participants: negative - user who did NOT opt in cannot see others', async () => {
+  const outsider = await registerUser(H.api, 'no-optin@example.com');
+  const res = await H.api('GET', `${base()}/participants`, { token: outsider });
+  assert.equal(res.status, 403);
+});
+
 test('isolation: negative - matching is scoped per hackathon', async () => {
   const hid2 = await createHackathon(H.api, adminToken, 'Other Hack');
   const me = await H.api('GET', `/api/hackathons/${hid2}/matching/me`, { token: tokens.p1 });

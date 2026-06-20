@@ -27,10 +27,23 @@ export default function Users() {
     try { await del(`/api/admin/users/${u.id}`); load(); }
     catch (err) { alert(err.message); }
   }
+  async function removeAll() {
+    if (!confirm('Delete ALL non-admin users? This also removes their submissions, matching profiles, scores, and any projects left with no participants. This cannot be undone.')) return;
+    try {
+      const res = await del('/api/admin/users');
+      setMsg(`Deleted ${res.deleted_users} user(s) and ${res.deleted_projects} orphaned project(s).`);
+      load();
+    } catch (err) { setError(err.message); }
+  }
 
   return (
     <div className="page">
-      <h1>Users</h1>
+      <div className="spread">
+        <h1 style={{ margin: 0 }}>Users</h1>
+        {users.filter((u) => u.role !== 'admin').length > 0 && (
+          <button className="danger outline" onClick={removeAll}>Delete all users</button>
+        )}
+      </div>
       <p className="muted">Global accounts. To let someone view &amp; judge projects, open a hackathon → Admin → Judges.</p>
 
       <div className="card">

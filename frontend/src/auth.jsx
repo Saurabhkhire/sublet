@@ -38,10 +38,16 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
+  async function refreshUser() {
+    const { user } = await api('GET', '/api/auth/me');
+    setUser(user);
+    return user;
+  }
+
   const isAdmin = user?.role === 'admin';
 
   return (
-    <AuthCtx.Provider value={{ user, loading, login, register, logout, isAdmin }}>
+    <AuthCtx.Provider value={{ user, loading, login, register, logout, refreshUser, isAdmin }}>
       {children}
     </AuthCtx.Provider>
   );

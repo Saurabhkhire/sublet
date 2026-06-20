@@ -49,3 +49,18 @@ test('users: negative - non-admin cannot list users', async () => {
   const res = await H.api('GET', '/api/admin/users', { token: userToken });
   assert.equal(res.status, 403);
 });
+
+test('users: negative - non-admin cannot delete all users', async () => {
+  const res = await H.api('DELETE', '/api/admin/users', { token: userToken });
+  assert.equal(res.status, 403);
+});
+
+test('users: positive - admin deletes all non-admin users (admin remains)', async () => {
+  await H.api('POST', '/api/admin/users', { token: adminToken, body: { email: 'bulk1@example.com', password: 'secret123' } });
+  await H.api('POST', '/api/admin/users', { token: adminToken, body: { email: 'bulk2@example.com', password: 'secret123' } });
+  const res = await H.api('DELETE', '/api/admin/users', { token: adminToken });
+  assert.equal(res.status, 200);
+  assert.ok(res.body.deleted_users >= 2);
+  const left = await H.api('GET', '/api/admin/users', { token: adminToken });
+  assert.ok(left.body.every((u) => u.role === 'admin'));
+});

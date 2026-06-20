@@ -37,6 +37,9 @@ if (isPg) {
   sqlite = new DatabaseSync(dbFile);
   sqlite.exec('PRAGMA journal_mode = WAL');
   sqlite.exec('PRAGMA foreign_keys = ON');
+  // Wait (up to 5s) instead of failing immediately if another process (e.g. a running
+  // backend) briefly holds a write lock — lets the seed scripts run alongside the server.
+  sqlite.exec('PRAGMA busy_timeout = 5000');
 }
 
 /** Run a statement (INSERT/UPDATE/DELETE/DDL). */

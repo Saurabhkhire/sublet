@@ -21,8 +21,13 @@ A **multi-hackathon** platform — team matching, project submission and judging
   of the idea, and **role diversity**. Re-running only matches new people.
 - **Project submission:** name, description, demo video, git link, team members, sponsors, tracks.
   Each person can be on **only one** project **per hackathon**.
-- **Judging:** selected judges score projects across 6 criteria (total /100) with comments, and
-  filter by sponsor. Admin sees all scores and averages.
+- **Judging (three tabs):** **Score projects** — review each project (big Demo & Git links, tracks,
+  sponsors), score it on **5 categories** (Presentation, Execution, Innovation, Impact,
+  Implementation, each 0–100, total = their average), and record how much you'd **invest** in it;
+  **Results & averages** — a ranked leaderboard of each project's **average score across all judges**
+  (medals + per-category averages); and **Investments** — projects ranked by **total invested across
+  all judges**. Filter by sponsor; admin sees every judge's breakdown.
+- **Light & dark mode:** an app-wide theme toggle (☾ / ☀) in the top bar, remembered across visits.
 - **Docs:** full §1–§13 product docs in [`docs/`](docs/README.md) per the rules in
   [`project.md`](project.md).
 - **Tests:** positive **and** negative test case for every workflow (51 tests).
@@ -68,6 +73,44 @@ together using `concurrently`. The Vite dev server proxies `/api/*` to the backe
 | `DATABASE_URL` | empty → SQLite | set to a `postgres://…neon.tech/…` URL to use Neon |
 | `OPENAI_API_KEY` | empty → offline fallback | enables real OpenAI similarity |
 | `OPENAI_MODEL` | `gpt-4o-mini` | chat model used to score idea similarity |
+
+## Demo data (seed scripts)
+
+Populate a hackathon with demo users and projects. The scripts write **directly to the database**,
+so the backend does **not** need to be running. Run `npm run install:all` once first.
+
+```bash
+# Add 50 users (emails like seeduser001@sublet.test, password: password123)
+npm run seed:users            # or: npm run seed:users 50
+
+# Add 50 projects (one per seeded user) to the target hackathon — run AFTER seed:users
+npm run seed:projects         # or: npm run seed:projects 50
+```
+
+To remove the data, use the **admin UI**: **Users → Delete all users** (also clears any
+projects left with no participants), and/or a hackathon's **Admin → Danger zone → Delete all
+projects & judge data**.
+
+Configure via env vars (all optional):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `COUNT` | `50` | how many to create (or pass as the first CLI arg) |
+| `HACKATHON` | `Ziward Hackathon` | target hackathon by **name or id** (falls back to the first) |
+| `SEED_PASSWORD` | `password123` | password for the seeded users |
+| `SEED_DOMAIN` | `sublet.test` | email domain used to name/identify seeded users |
+
+```bash
+# Seed 30 users + 30 projects into a specific hackathon
+HACKATHON="Ziward Hackathon" npm run seed:users 30
+HACKATHON="Ziward Hackathon" npm run seed:projects 30
+```
+
+> The scripts open the same database the API uses (SQLite locally, or Neon if `DATABASE_URL` is set
+> in `backend/.env`), creating the schema + admin + sample hackathon first if needed. Each seeded
+> project is created by a distinct seeded user (one project per person per hackathon). Seeded users
+> use the `@sublet.test` domain; seeded projects are named `[seed] Project NNN`. Re-running is safe
+> (idempotent). If the backend is also running, the scripts share the database file safely.
 
 ## Deploying with Neon
 

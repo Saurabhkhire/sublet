@@ -8,7 +8,7 @@ export default function Hackathons() {
   const navigate = useNavigate();
   const [list, setList] = useState([]);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: '', details: '' });
+  const [form, setForm] = useState({ name: '', details: '', support_info: '', schedule: '', event_date: '', start_time: '', end_time: '', location: '' });
   const [error, setError] = useState('');
 
   function load() { get('/api/hackathons').then(setList).catch(() => {}); }
@@ -19,7 +19,7 @@ export default function Hackathons() {
     setError('');
     try {
       const h = await post('/api/hackathons', form);
-      setForm({ name: '', details: '' });
+      setForm({ name: '', details: '', support_info: '', schedule: '', event_date: '', start_time: '', end_time: '', location: '' });
       setCreating(false);
       load();
       navigate(`/h/${h.id}/admin`);
@@ -45,9 +45,31 @@ export default function Hackathons() {
           <label>Name
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Ziward Hackathon" autoFocus />
           </label>
-          <label>Details
-            <textarea rows={3} value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} placeholder="Theme, dates, rules…" />
+          <label>Description
+            <textarea rows={3} value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} placeholder="What is this hackathon about?" />
           </label>
+          <div className="row" style={{ gap: 16 }}>
+            <label style={{ flex: 1, minWidth: 140 }}>Date
+              <input type="date" value={form.event_date} onChange={(e) => setForm({ ...form, event_date: e.target.value })} />
+            </label>
+            <label style={{ flex: 1, minWidth: 110 }}>Start time
+              <input type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} />
+            </label>
+            <label style={{ flex: 1, minWidth: 110 }}>End time
+              <input type="time" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} />
+            </label>
+          </div>
+          <label>Location
+            <input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="e.g. Bengaluru — Tech Park Auditorium (or an online link)" />
+          </label>
+          <p className="help">Projects can only be submitted on the event date you set here.</p>
+          <label>Community &amp; Support
+            <textarea rows={2} value={form.support_info} onChange={(e) => setForm({ ...form, support_info: e.target.value })} placeholder="Discord / Slack invite link & how to get help…" />
+          </label>
+          <label>Schedule
+            <textarea rows={3} value={form.schedule} onChange={(e) => setForm({ ...form, schedule: e.target.value })} placeholder="Kickoff, checkpoints, submission deadline, judging…" />
+          </label>
+          <p className="help">You can add tracks, sponsors and judges (and edit everything) on the next screen.</p>
           {error && <p className="error">{error}</p>}
           <div className="row">
             <button type="submit">Create</button>

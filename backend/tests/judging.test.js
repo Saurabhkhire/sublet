@@ -22,18 +22,20 @@ before(async () => {
 after(async () => { await H.cleanup(); });
 
 const base = () => `/api/hackathons/${hid}/projects`;
-const fullScore = { presentation: 18, technical: 17, code_quality: 13, functionality: 14, innovation: 12, ux: 13, comments: 'Great' };
+const fullScore = { presentation: 80, execution: 90, innovation: 70, impact: 85, implementation: 75, investment: 50000, comments: 'Great' };
 
-test('criteria: positive - hackathon meta exposes criteria summing to 100', async () => {
+test('criteria: positive - hackathon meta exposes 5 categories each out of 100', async () => {
   const meta = await H.api('GET', `/api/hackathons/${hid}`, { token: judgeToken });
-  const sum = meta.body.score_criteria.reduce((a, c) => a + c.max, 0);
-  assert.equal(sum, 100);
+  const cats = meta.body.score_criteria;
+  assert.equal(cats.length, 5);
+  assert.ok(cats.every((c) => c.max === 100));
+  assert.deepEqual(cats.map((c) => c.key), ['presentation', 'execution', 'innovation', 'impact', 'implementation']);
 });
 
-test('score: positive - judge scores a project, total computed', async () => {
+test('score: positive - judge scores a project, total is the average of the 5', async () => {
   const res = await H.api('POST', `${base()}/${projectId}/score`, { token: judgeToken, body: fullScore });
   assert.equal(res.status, 200);
-  assert.equal(res.body.total, 18 + 17 + 13 + 14 + 12 + 13);
+  assert.equal(res.body.total, (80 + 90 + 70 + 85 + 75) / 5); // = 80
 });
 
 test('score: negative - non-judge cannot score', async () => {
@@ -43,7 +45,33 @@ test('score: negative - non-judge cannot score', async () => {
 
 test('score: negative - out-of-range value rejected', async () => {
   const res = await H.api('POST', `${base()}/${projectId}/score`, {
-    token: judgeToken, body: { ...fullScore, presentation: 50 },
+    token: judgeToken, body: { ...fullScore, presentation: 150 },
+  });
+  assert.equal(res.status, 400);
+});
+
+test('list: positive - projects show average + per-category averages + my own score', async () => {
+  const list = await H.api('GET', base(), { token: judgeToken });
+  const scored = list.body.find((p) => p.id === projectId);
+  assert.ok(scored.average_score !== null);
+  assert.ok(scored.judge_count >= 1);
+  // Per-category averages for the Results view.
+  assert.ok(scored.category_averages && typeof scored.category_averages.execution === 'number');
+  // The requesting judge's own score, for the "scored by you" indicator.
+  assert.ok(typeof scored.my_score === 'number');
+});
+
+test('investment: positive - judge investment totals per project', async () => {
+  const list = await H.api('GET', base(), { token: judgeToken });
+  const scored = list.body.find((p) => p.id === projectId);
+  assert.equal(scored.total_investment, 50000); // one judge invested 50k
+  assert.equal(scored.investor_count, 1);
+  assert.equal(scored.my_investment, 50000);
+});
+
+test('investment: negative - negative investment rejected', async () => {
+  const res = await H.api('POST', `${base()}/${projectId}/score`, {
+    token: judgeToken, body: { ...fullScore, investment: -100 },
   });
   assert.equal(res.status, 400);
 });

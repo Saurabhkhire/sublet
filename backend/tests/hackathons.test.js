@@ -47,6 +47,51 @@ test('hackathon: positive - admin edits details', async () => {
   assert.equal(res.body.details, 'Updated');
 });
 
+test('hackathon: positive - create & edit support_info + schedule', async () => {
+  const created = await H.api('POST', '/api/hackathons', {
+    token: adminToken, body: { name: 'Info Hack', details: 'd', support_info: 'https://discord.gg/x', schedule: 'Day 1: kickoff' },
+  });
+  assert.equal(created.status, 201);
+  assert.equal(created.body.support_info, 'https://discord.gg/x');
+  assert.equal(created.body.schedule, 'Day 1: kickoff');
+  const edited = await H.api('PUT', `/api/hackathons/${created.body.id}`, {
+    token: adminToken, body: { name: 'Info Hack', support_info: 'https://discord.gg/y', schedule: 'updated' },
+  });
+  assert.equal(edited.body.support_info, 'https://discord.gg/y');
+  assert.equal(edited.body.schedule, 'updated');
+});
+
+test('tracks: positive - track carries a description', async () => {
+  const res = await H.api('POST', `/api/hackathons/${hid}/tracks`, {
+    token: adminToken, body: { name: 'AI Agents', description: 'Build autonomous agents' },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.description, 'Build autonomous agents');
+  const list = await H.api('GET', `/api/hackathons/${hid}/tracks`, { token: userToken });
+  assert.ok(list.body.some((t) => t.description === 'Build autonomous agents'));
+});
+
+test('sponsors: positive - sponsor carries description, access instructions, prizes', async () => {
+  const res = await H.api('POST', `/api/hackathons/${hid}/sponsors`, {
+    token: adminToken,
+    body: { name: 'OpenAI', description: 'AI models', access_instructions: 'Use this key: …', prizes: '$5,000 in credits' },
+  });
+  assert.equal(res.status, 201);
+  assert.equal(res.body.access_instructions, 'Use this key: …');
+  assert.equal(res.body.prizes, '$5,000 in credits');
+  const list = await H.api('GET', `/api/hackathons/${hid}/sponsors`, { token: userToken });
+  const s = list.body.find((x) => x.name === 'OpenAI');
+  assert.equal(s.description, 'AI models');
+});
+
+test('meta: positive - includes judges (with linkedin) for the info display', async () => {
+  const uid = await userIdByEmail(H.api, adminToken, 'u@example.com');
+  await H.api('POST', `/api/hackathons/${hid}/judges`, { token: adminToken, body: { user_id: uid } });
+  const meta = await H.api('GET', `/api/hackathons/${hid}`, { token: userToken });
+  assert.ok(Array.isArray(meta.body.judges));
+  assert.ok(meta.body.judges.some((j) => j.id === uid && 'linkedin' in j));
+});
+
 test('tracks/sponsors: positive - admin manages multiple entries', async () => {
   const t1 = await H.api('POST', `/api/hackathons/${hid}/tracks`, { token: adminToken, body: { name: 'AI' } });
   const t2 = await H.api('POST', `/api/hackathons/${hid}/tracks`, { token: adminToken, body: { name: 'Web' } });

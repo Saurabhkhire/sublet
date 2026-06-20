@@ -4,7 +4,8 @@
 - **Framework:** React 18 (app branded **SUBLET**)
 - **Language:** JavaScript (JSX, ES modules)
 - **UI Library:** none — hand-written design system in `frontend/src/styles.css` (Inter font,
-  light theme, top nav + hackathon-workspace sidebar)
+  CSS-variable theming with **light & dark modes**, top nav + hackathon-workspace sidebar). The
+  theme is set via a `data-theme` attribute and persisted in `localStorage` (`theme.jsx`).
 - **State Management:** React Context for auth (`frontend/src/auth.jsx`); hackathon-scoped meta
   shared via the router Outlet context (`HackathonLayout`); local component state otherwise
 - **Routing:** React Router v6 — `/`, `/users`, and nested `/h/:hid/{matching,submit,judging,admin}`

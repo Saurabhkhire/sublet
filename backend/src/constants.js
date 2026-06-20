@@ -1,11 +1,11 @@
-// Judging criteria. Maxima sum to 100.
+// Judging criteria. Each category is scored 0–100; a judge's total for a project is the
+// AVERAGE of the five categories (also out of 100).
 export const SCORE_CRITERIA = [
-  { key: 'presentation', label: 'Presentation & Demo', max: 20 },
-  { key: 'technical', label: 'Technical Complexity', max: 20 },
-  { key: 'code_quality', label: 'Implementation: Code Quality', max: 15 },
-  { key: 'functionality', label: 'Implementation: Functionality / Completeness', max: 15 },
-  { key: 'innovation', label: 'Implementation: Innovation & Originality', max: 15 },
-  { key: 'ux', label: 'Implementation: User Experience', max: 15 },
+  { key: 'presentation', label: 'Presentation', max: 100 },
+  { key: 'execution', label: 'Execution', max: 100 },
+  { key: 'innovation', label: 'Innovation', max: 100 },
+  { key: 'impact', label: 'Impact', max: 100 },
+  { key: 'implementation', label: 'Implementation', max: 100 },
 ];
 export const SCORE_MAX_TOTAL = 100;
 

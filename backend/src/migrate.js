@@ -17,6 +17,59 @@ async function columnNames(table) {
   return rows.map((r) => r.name);
 }
 
+// Rebuilds the scores table when it still has the old 6-category columns. The scoring model
+// changed (5 categories each 0–100, total = their average), so old rows are not carried over.
+export async function migrateScores() {
+  if (isPg) return;
+  if (!(await tableExists('scores'))) return;
+  const cols = await columnNames('scores');
+  if (cols.includes('execution')) return; // already on the new schema
+  if (!cols.includes('technical')) return; // unknown shape — leave it alone
+
+  console.log('[migrate] updating scores to the 5-category model (presentation/execution/innovation/impact/implementation)');
+  await run('DROP TABLE scores');
+  await run(`CREATE TABLE scores (
+    id ${PK}, project_id INTEGER NOT NULL, judge_id INTEGER NOT NULL,
+    presentation INTEGER NOT NULL DEFAULT 0, execution INTEGER NOT NULL DEFAULT 0,
+    innovation INTEGER NOT NULL DEFAULT 0, impact INTEGER NOT NULL DEFAULT 0,
+    implementation INTEGER NOT NULL DEFAULT 0, total REAL NOT NULL DEFAULT 0,
+    investment REAL NOT NULL DEFAULT 0, comments TEXT NOT NULL DEFAULT '',
+    UNIQUE (project_id, judge_id))`);
+}
+
+// Adds the richer hackathon/track/sponsor info columns to existing tables.
+export async function migrateHackathonInfo() {
+  if (isPg) return;
+  const add = async (table, col) => {
+    if (!(await tableExists(table))) return;
+    const cols = await columnNames(table);
+    if (!cols.includes(col)) {
+      await run(`ALTER TABLE ${table} ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
+    }
+  };
+  await add('hackathons', 'support_info');
+  await add('hackathons', 'schedule');
+  await add('hackathons', 'event_date');
+  await add('hackathons', 'start_time');
+  await add('hackathons', 'end_time');
+  await add('hackathons', 'location');
+  await add('tracks', 'description');
+  await add('sponsors', 'description');
+  await add('sponsors', 'access_instructions');
+  await add('sponsors', 'prizes');
+}
+
+// Adds the per-judge investment column to an existing scores table.
+export async function migrateInvestment() {
+  if (isPg) return;
+  if (!(await tableExists('scores'))) return;
+  const cols = await columnNames('scores');
+  if (!cols.includes('investment')) {
+    await run('ALTER TABLE scores ADD COLUMN investment REAL NOT NULL DEFAULT 0');
+    console.log('[migrate] added investment column to scores');
+  }
+}
+
 export async function migrateLegacy() {
   if (isPg) return; // fresh schema on Postgres; no legacy data to migrate
   if (!(await tableExists('tracks'))) return; // brand-new DB; schema.js already built it

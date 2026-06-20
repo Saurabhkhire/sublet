@@ -29,18 +29,30 @@ router.post('/', adminOnly, async (req, res) => {
   const id = await insert('hackathons', {
     name,
     details: req.body?.details || '',
+    support_info: req.body?.support_info || '',
+    schedule: req.body?.schedule || '',
+    event_date: req.body?.event_date || '',
+    start_time: req.body?.start_time || '',
+    end_time: req.body?.end_time || '',
+    location: req.body?.location || '',
     created_by: req.user.id,
     created_at: new Date().toISOString(),
   });
   res.status(201).json(await get('SELECT * FROM hackathons WHERE id = ?', [id]));
 });
 
-// Meta for a single hackathon (used to render forms): info + tracks + sponsors + options.
+// Meta for a single hackathon (used to render forms + the public info display):
+// hackathon fields + tracks + sponsors + judges + options.
 router.get('/:hid', hackathonContext, async (req, res) => {
   res.json({
     hackathon: req.hackathon,
     tracks: await all('SELECT * FROM tracks WHERE hackathon_id = ? ORDER BY id', [req.hackathonId]),
     sponsors: await all('SELECT * FROM sponsors WHERE hackathon_id = ? ORDER BY id', [req.hackathonId]),
+    judges: await all(
+      `SELECT u.id, u.email, u.linkedin FROM hackathon_judges hj
+       JOIN users u ON u.id = hj.user_id WHERE hj.hackathon_id = ? ORDER BY u.email`,
+      [req.hackathonId]
+    ),
     roles: ROLE_OPTIONS.map((r) => r.value),
     score_criteria: SCORE_CRITERIA,
     is_judge: req.isJudge,
@@ -51,11 +63,20 @@ router.get('/:hid', hackathonContext, async (req, res) => {
 router.put('/:hid', hackathonContext, adminOnly, async (req, res) => {
   const name = (req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Hackathon name is required' });
-  await run('UPDATE hackathons SET name = ?, details = ? WHERE id = ?', [
-    name,
-    req.body?.details || '',
-    req.hackathonId,
-  ]);
+  await run(
+    'UPDATE hackathons SET name = ?, details = ?, support_info = ?, schedule = ?, event_date = ?, start_time = ?, end_time = ?, location = ? WHERE id = ?',
+    [
+      name,
+      req.body?.details || '',
+      req.body?.support_info || '',
+      req.body?.schedule || '',
+      req.body?.event_date || '',
+      req.body?.start_time || '',
+      req.body?.end_time || '',
+      req.body?.location || '',
+      req.hackathonId,
+    ]
+  );
   res.json(await get('SELECT * FROM hackathons WHERE id = ?', [req.hackathonId]));
 });
 
@@ -99,14 +120,16 @@ router.get('/:hid/tracks', hackathonContext, async (req, res) =>
 router.post('/:hid/tracks', hackathonContext, adminOnly, async (req, res) => {
   const name = (req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Track name is required' });
-  const id = await insert('tracks', { hackathon_id: req.hackathonId, name });
-  res.status(201).json({ id, name });
+  const description = req.body?.description || '';
+  const id = await insert('tracks', { hackathon_id: req.hackathonId, name, description });
+  res.status(201).json({ id, name, description });
 });
 router.put('/:hid/tracks/:id', hackathonContext, adminOnly, async (req, res) => {
   const name = (req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Track name is required' });
-  await run('UPDATE tracks SET name = ? WHERE id = ? AND hackathon_id = ?', [name, req.params.id, req.hackathonId]);
-  res.json({ id: Number(req.params.id), name });
+  const description = req.body?.description || '';
+  await run('UPDATE tracks SET name = ?, description = ? WHERE id = ? AND hackathon_id = ?', [name, description, req.params.id, req.hackathonId]);
+  res.json({ id: Number(req.params.id), name, description });
 });
 router.delete('/:hid/tracks/:id', hackathonContext, adminOnly, async (req, res) => {
   await run('DELETE FROM tracks WHERE id = ? AND hackathon_id = ?', [req.params.id, req.hackathonId]);
@@ -120,14 +143,26 @@ router.get('/:hid/sponsors', hackathonContext, async (req, res) =>
 router.post('/:hid/sponsors', hackathonContext, adminOnly, async (req, res) => {
   const name = (req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Sponsor name is required' });
-  const id = await insert('sponsors', { hackathon_id: req.hackathonId, name });
-  res.status(201).json({ id, name });
+  const data = {
+    hackathon_id: req.hackathonId, name,
+    description: req.body?.description || '',
+    access_instructions: req.body?.access_instructions || '',
+    prizes: req.body?.prizes || '',
+  };
+  const id = await insert('sponsors', data);
+  res.status(201).json({ id, ...data });
 });
 router.put('/:hid/sponsors/:id', hackathonContext, adminOnly, async (req, res) => {
   const name = (req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Sponsor name is required' });
-  await run('UPDATE sponsors SET name = ? WHERE id = ? AND hackathon_id = ?', [name, req.params.id, req.hackathonId]);
-  res.json({ id: Number(req.params.id), name });
+  const description = req.body?.description || '';
+  const access_instructions = req.body?.access_instructions || '';
+  const prizes = req.body?.prizes || '';
+  await run(
+    'UPDATE sponsors SET name = ?, description = ?, access_instructions = ?, prizes = ? WHERE id = ? AND hackathon_id = ?',
+    [name, description, access_instructions, prizes, req.params.id, req.hackathonId]
+  );
+  res.json({ id: Number(req.params.id), name, description, access_instructions, prizes });
 });
 router.delete('/:hid/sponsors/:id', hackathonContext, adminOnly, async (req, res) => {
   await run('DELETE FROM sponsors WHERE id = ? AND hackathon_id = ?', [req.params.id, req.hackathonId]);

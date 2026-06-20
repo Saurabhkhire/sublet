@@ -28,13 +28,23 @@ Matching track/sponsor selections are stored as JSON text.
 ### Table: `hackathons`
 - **Purpose:** A hackathon instance with its own name, details and scoped data.
 - **Primary Key:** `id`
-- **Columns:** `id` int PK; `name` text; `details` text; `created_by` int (users.id);
+- **Columns:** `id` int PK; `name` text; `details` text (description); `support_info` text
+  (Community & Support — Discord/channel join info, shown to everyone); `schedule` text;
+  `event_date` text (YYYY-MM-DD — the day the hackathon runs; **projects can only be submitted
+  on this date** when set; empty = unrestricted); `start_time` text (HH:MM); `end_time` text
+  (HH:MM); `location` text (venue address or online link); `created_by` int (users.id);
   `created_at` text.
 
-### Table: `tracks` / `sponsors`
-- **Purpose:** Tracks / sponsors for one hackathon (multiple entries each).
+### Table: `tracks`
+- **Purpose:** Tracks / themes for one hackathon (multiple entries).
 - **Primary Key:** `id` · **Columns:** `id` int PK; `hackathon_id` int (FK→hackathons.id);
-  `name` text.
+  `name` text; `description` text.
+
+### Table: `sponsors`
+- **Purpose:** Sponsors for one hackathon (multiple entries).
+- **Primary Key:** `id` · **Columns:** `id` int PK; `hackathon_id` int (FK→hackathons.id);
+  `name` text; `description` text; `access_instructions` text (Tool Access & Credits);
+  `prizes` text.
 
 ### Table: `hackathon_judges`
 - **Purpose:** Users the admin selected to **view & judge** a given hackathon.
@@ -68,11 +78,12 @@ Matching track/sponsor selections are stored as JSON text.
 - **Columns:** `project_id` int; `track_id` int — / — `project_id` int; `sponsor_id` int.
 
 ### Table: `scores`
-- **Purpose:** One judge's score for one project.
+- **Purpose:** One judge's score for one project. Five categories, each 0–100; `total` is their
+  **average** (out of 100).
 - **Primary Key:** `id` · **Unique:** `(project_id, judge_id)`
-- **Columns:** `id` PK; `project_id` int; `judge_id` int; `presentation` 0–20; `technical`
-  0–20; `code_quality` 0–15; `functionality` 0–15; `innovation` 0–15; `ux` 0–15; `total`
-  0–100; `comments` text.
+- **Columns:** `id` PK; `project_id` int; `judge_id` int; `presentation` 0–100; `execution`
+  0–100; `innovation` 0–100; `impact` 0–100; `implementation` 0–100; `total` REAL (average of the
+  five); `investment` REAL (how much this judge would invest, ≥ 0); `comments` text.
 
 ## 5.3 Legacy migration
 `backend/src/migrate.js` upgrades a pre-multi-hackathon SQLite database in place: it creates a

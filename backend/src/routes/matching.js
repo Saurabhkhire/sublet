@@ -72,6 +72,27 @@ router.get('/me', async (req, res) => {
   res.json({ profile, group });
 });
 
+// Everyone who opted into matching can see the other opt-ins, so participants can find
+// teammates themselves. Visible only to people who have opted in (or admins).
+router.get('/participants', async (req, res) => {
+  const isAdmin = req.user.role === 'admin';
+  const mine = await get('SELECT 1 FROM matching_profiles WHERE hackathon_id = ? AND user_id = ?', [
+    req.hackathonId,
+    req.user.id,
+  ]);
+  if (!isAdmin && !mine) {
+    return res.status(403).json({ error: 'Opt into team matching to see other participants.' });
+  }
+  const rows = await all(
+    `SELECT mp.user_id, mp.role, mp.plan_to_build, mp.tracks, mp.sponsors, mp.matched, mp.group_id,
+            u.email, u.linkedin
+     FROM matching_profiles mp JOIN users u ON u.id = mp.user_id
+     WHERE mp.hackathon_id = ? ORDER BY mp.matched, mp.id`,
+    [req.hackathonId]
+  );
+  res.json(rows.map(parseProfile));
+});
+
 /* ----------------------- Admin-only views ----------------------- */
 router.get('/profiles', adminOnly, async (req, res) => {
   const rows = await all(
