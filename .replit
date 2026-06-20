@@ -51,3 +51,4 @@ build = ["bash", "-c", "npm --prefix frontend install && npm --prefix frontend r
 
 [userenv.shared]
 JWT_SECRET = "0512ee1ff1ccd697f5a129655c2c7ad616a8af36bfec325e72e6d9bd4d7aea1dc855a17d6a8ec80021ebfcb588f2abc9"
+ADMIN_EMAIL = "admin123"
