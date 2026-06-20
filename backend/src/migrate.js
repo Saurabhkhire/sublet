@@ -39,7 +39,25 @@ export async function migrateScores() {
 
 // Adds the richer hackathon/track/sponsor info columns to existing tables.
 export async function migrateHackathonInfo() {
-  if (isPg) return;
+  if (isPg) {
+    // Postgres supports ADD COLUMN IF NOT EXISTS natively — safe to run every boot.
+    const cols = [
+      ['hackathons', 'support_info'],
+      ['hackathons', 'schedule'],
+      ['hackathons', 'event_date'],
+      ['hackathons', 'start_time'],
+      ['hackathons', 'end_time'],
+      ['hackathons', 'location'],
+      ['tracks', 'description'],
+      ['sponsors', 'description'],
+      ['sponsors', 'access_instructions'],
+      ['sponsors', 'prizes'],
+    ];
+    for (const [table, col] of cols) {
+      await run(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${col} TEXT NOT NULL DEFAULT ''`);
+    }
+    return;
+  }
   const add = async (table, col) => {
     if (!(await tableExists(table))) return;
     const cols = await columnNames(table);
@@ -61,7 +79,10 @@ export async function migrateHackathonInfo() {
 
 // Adds the per-judge investment column to an existing scores table.
 export async function migrateInvestment() {
-  if (isPg) return;
+  if (isPg) {
+    await run('ALTER TABLE scores ADD COLUMN IF NOT EXISTS investment REAL NOT NULL DEFAULT 0');
+    return;
+  }
   if (!(await tableExists('scores'))) return;
   const cols = await columnNames('scores');
   if (!cols.includes('investment')) {
