@@ -64,4 +64,18 @@ router.delete('/users/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// Re-apply admin credentials from current environment variables.
+// Useful after changing ADMIN_EMAIL / ADMIN_PASSWORD secrets without resetting the DB.
+router.post('/reseed-credentials', async (_req, res) => {
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin123';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  const hash = bcrypt.hashSync(adminPassword, 10);
+
+  const existing = await get("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
+  if (!existing) return res.status(404).json({ error: 'No admin user found' });
+
+  await run('UPDATE users SET email = ?, password_hash = ? WHERE id = ?', [adminEmail, hash, existing.id]);
+  res.json({ ok: true, email: adminEmail });
+});
+
 export default router;

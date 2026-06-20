@@ -13,6 +13,7 @@ export default function AdminPanel() {
       <JudgesSection hid={hid} />
       <MatchingSection hid={hid} />
       <DangerZone hid={hid} name={meta.hackathon.name} />
+      <SystemSection />
     </div>
   );
 }
@@ -307,6 +308,42 @@ function DangerZone({ hid, name }) {
         <button className="danger" onClick={destroy}>Delete hackathon</button>
       </div>
       {msg && <p className="success" style={{ marginTop: 12 }}>{msg}</p>}
+    </section>
+  );
+}
+
+function SystemSection() {
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function reseedCredentials() {
+    if (!confirm('Apply admin credentials from environment variables (ADMIN_EMAIL / ADMIN_PASSWORD) now? You will need to log in again with the new credentials.')) return;
+    setBusy(true); setMsg(''); setErr('');
+    try {
+      const res = await post('/api/admin/reseed-credentials');
+      setMsg(`Done — admin login is now "${res.email}". Please log out and log back in.`);
+    } catch (e) {
+      setErr('Failed to apply credentials. Check the server logs.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card" style={{ borderColor: '#c4d4f4' }}>
+      <h3 style={{ marginTop: 0 }}>System</h3>
+      <div className="spread" style={{ flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <strong>Apply admin credentials from environment</strong>
+          <div className="muted small">Updates the admin email &amp; password to match the current <code>ADMIN_EMAIL</code> / <code>ADMIN_PASSWORD</code> secrets — useful after changing them without resetting the database.</div>
+        </div>
+        <button className="outline" onClick={reseedCredentials} disabled={busy}>
+          {busy ? 'Applying…' : 'Apply credentials'}
+        </button>
+      </div>
+      {msg && <p className="success" style={{ marginTop: 12 }}>{msg}</p>}
+      {err && <p className="error" style={{ marginTop: 12 }}>{err}</p>}
     </section>
   );
 }
