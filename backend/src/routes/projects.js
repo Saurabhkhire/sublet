@@ -50,11 +50,9 @@ async function loadProjectDetail(projectId) {
   };
 }
 
-// Today's date in the server's local timezone, as YYYY-MM-DD.
-function todayLocalDate() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+// Today's date in UTC as YYYY-MM-DD.
+function todayUTCDate() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 // Create a submission. Each participant may be on only ONE project per hackathon.
@@ -65,13 +63,20 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Project name is required' });
   }
 
-  // Projects can only be submitted on the day of the hackathon. Hackathons without a set
-  // event date (e.g. legacy ones) are unrestricted.
+  // Submissions are allowed from the hackathon date through the following day (UTC),
+  // giving a ~48-hour window that handles any timezone difference between the server and
+  // participants. Hackathons without a set event_date are unrestricted.
   const eventDate = (req.hackathon.event_date || '').trim();
-  if (eventDate && eventDate !== todayLocalDate()) {
-    return res.status(403).json({
-      error: `Projects can only be submitted on the day of the hackathon (${eventDate}).`,
-    });
+  if (eventDate) {
+    const today = todayUTCDate();
+    const deadline = new Date(eventDate + 'T00:00:00Z');
+    deadline.setDate(deadline.getDate() + 1);
+    const deadlineStr = deadline.toISOString().slice(0, 10);
+    if (today < eventDate || today > deadlineStr) {
+      return res.status(403).json({
+        error: `Projects can only be submitted on the day of the hackathon (${eventDate}).`,
+      });
+    }
   }
   const participantIds = Array.from(new Set([req.user.id, ...participants.map(Number)]));
 
