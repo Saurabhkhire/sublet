@@ -331,11 +331,11 @@ projects — the average and per-category averages. Close to return to the leade
 
 ## UI Page: `Hackathon · Admin` (admin only)
 - **Where to find it:** `/h/:id/admin`.
-- **Purpose:** Configure this hackathon: details, tracks, sponsors, judges, matching; plus a
-  danger zone to reset or delete.
-- **What is on the screen:** Details form; Tracks editor; Sponsors editor; Judges (pick users to
-  grant view+judge); Matching panel (counts, Run matching, opt-ins table, formed teams); Danger
-  zone (Delete all projects & judge data; Delete hackathon).
+- **Purpose:** Configure this hackathon: details, tracks, sponsors, judges, projects, matching;
+  plus a danger zone to reset or delete.
+- **What is on the screen:** Details form; Tracks editor; Sponsors editor; Judges (search-to-add
+  users); Projects editor (expand any project to edit it); Matching panel (counts, Run matching,
+  opt-ins table, formed teams); Danger zone (Delete all projects & judge data; Delete hackathon).
 - **Validation:** track/sponsor names non-empty; matching needs new opt-ins; destructive actions
   confirm first.
 
@@ -360,9 +360,11 @@ instructions and prizes appear on the Overview (Sponsors, Tool Access & Credits,
 **Flow picture** `[Edit sponsor fields] -> {name empty?} --YES--> [Reject]; --NO--> [Saved]`
 
 ### Workflow 4: Assign judges
-**What the user sees** Pick a user from the dropdown → they appear as a judge chip; ✕ removes.
-**What the system does** Grant/revoke that user's view+judge access **for this hackathon only**.
-**Flow picture** `[Pick user] -> [Add judge]; [✕] -> [Revoke]`
+**What the user sees** Type a name or email into the **search box** — a dropdown shows up to 20
+matching users as you type. Click a result to add them as a judge chip. ✕ on a chip removes them.
+**What the system does** Fetch matching users (≤ 20) on each keystroke (debounced). Grant/revoke
+that user's view+judge access **for this hackathon only**.
+**Flow picture** `[Type email] -> [Dropdown results] -> [Pick] -> [Judge chip]; [✕] -> [Revoke]`
 
 ### Workflow 5: Run team matching
 **What the user sees** Counts (opted in / waiting / runs); Run forms teams of ≤4 and lists them.
@@ -382,3 +384,31 @@ scores for this hackathon. Tracks, sponsors, judges and matching remain.
 **What the user sees** Confirm → returns to the Hackathons list; the hackathon is gone.
 **What the system does** Remove the hackathon and all of its data.
 **Flow picture** `[Delete hackathon] -> {confirm?} --YES--> [Remove all] -> [Hackathons]`
+
+### Workflow 8: Edit a submitted project
+- **What starts it:** Admin clicks **▼ edit** on any project in the **Projects** section.
+
+**What the user sees**
+1. The project row expands to show a full edit form: **Project name**, **Short description**,
+   **Demo video link**, **Git / repo link**.
+2. Current **participants** are shown as removable chips; type in the search box to find and add
+   more (same search-as-you-type dropdown as judges).
+3. Available **tracks** and **sponsors** for this hackathon are shown as checkboxes — tick/untick
+   to update which ones the project is linked to.
+4. A **Delete project** button removes the project entirely (with confirmation).
+5. Click **Save changes** → form collapses; the row updates in place.
+
+**What the system does**
+1. Admin only? **NO:** deny. **YES:** continue.
+2. Name provided and not blank? **NO:** stop. **YES:** update name, description, and links.
+3. Replace participants with the new list; replace tracks and sponsors.
+4. Return the updated project details.
+
+**Simple logic summary** IF admin AND name not blank THEN update all fields; ELSE stop.
+
+**Flow picture**
+```
+[▼ edit] -> [Edit form: details + participants search + track/sponsor checkboxes]
+         -> [Save] -> {admin & name ok?} --NO--> [Error]; --YES--> [Updated row]
+         -> [Delete project] -> {confirm?} --YES--> [Removed]
+```

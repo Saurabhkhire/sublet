@@ -148,8 +148,8 @@ On **Register** (and optionally after verify-email), show **Put as sponsor**, **
 
 ### 1.1 Project Summary
 - **Project Name:** SUBLET
-- **Version / Update Tag:** v2.7.0
-- **Date:** 2026-06-19
+- **Version / Update Tag:** v2.8.0
+- **Date:** 2026-06-22
 - **Owner / Team:** Hackathon organizers
 - **Short Description:** A **multi-hackathon** platform. Admins create hackathons, each with its
   own details, tracks, sponsors, selected judges and matching run. Within a hackathon,
@@ -253,8 +253,9 @@ runs synchronously on demand.
 ## 4) UI Pages and Workflows
 
 > **Filled instance:** [`docs/04-ui-pages-and-workflows.md`](docs/04-ui-pages-and-workflows.md)
-> — pages Login, Register, Dashboard, Team Matching, Submit Project, Judging, Admin Panel; each
-> workflow in plain language (no API/JSON). The template guidance below is retained for reuse.
+> — pages Login, Register, Hackathons, Overview, Team Matching, Submit Project, Judging, Admin
+> Panel (WF 1–8: details, tracks, sponsors, judges via search dropdown, project editor, matching,
+> reset, delete); each workflow in plain language (no API/JSON). Template guidance retained below.
 
 Document **one UI Page block at a time**. Under that page, list **Workflow 1**, **Workflow 2**, … (each user action or screen load gets its own workflow).
 
@@ -569,6 +570,7 @@ Repeat one subsection per **Workflow** from §4 (same order as in §4 when possi
 
 | Date | Version | Change Type | Description | Updated By |
 |------|---------|-------------|-------------|------------|
+| 2026-06-22 | v2.8.0 | Feature / Fix | Admin project editor (expand any project to edit name, description, links, participants, tracks, sponsors, or delete); searchable user typeahead dropdown (judges + participants, ≤20 results on keystroke); AM/PM time display on Overview; clickable URLs in Community & Support text; submission window broadened to 48-hour UTC range. | Update |
 | 2026-06-19 | v2.7.0 | Feature | Hackathons capture event date, start/end time and location (create + admin edit) shown in an Overview "When & Where" card; projects can be submitted **only on the hackathon's event date** (API rejects off-day with 403; Submit page disables off-day). Legacy/no-date hackathons unrestricted; columns auto-migrated; 73 tests. | Update |
 | 2026-06-16 | v2.6.0 | Feature | Richer hackathons — Community & Support (Discord), Schedule, track descriptions, per-sponsor description/Tool-Access-&-Credits/Prizes (admin-editable); public Overview info display incl. judges with LinkedIn; 71 tests. | Update |
 | 2026-06-16 | v2.5.1 | Fix | Demo seed scripts now write directly to the DB (no backend server needed) via `backend/src/seedData.js`; 67 tests. | Update |
