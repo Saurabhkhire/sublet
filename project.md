@@ -570,6 +570,7 @@ Repeat one subsection per **Workflow** from §4 (same order as in §4 when possi
 
 | Date | Version | Change Type | Description | Updated By |
 |------|---------|-------------|-------------|------------|
+| 2026-06-22 | v2.8.1 | Fix | Submit Project teammate picker replaced with search-as-you-type dropdown (no more all-users list); `GET /api/meta/users?search=` added; `UserSearchInput` extracted to shared component; frontend submission window aligned to 48-hour UTC logic. | Update |
 | 2026-06-22 | v2.8.0 | Feature / Fix | Admin project editor (expand any project to edit name, description, links, participants, tracks, sponsors, or delete); searchable user typeahead dropdown (judges + participants, ≤20 results on keystroke); AM/PM time display on Overview; clickable URLs in Community & Support text; submission window broadened to 48-hour UTC range. | Update |
 | 2026-06-19 | v2.7.0 | Feature | Hackathons capture event date, start/end time and location (create + admin edit) shown in an Overview "When & Where" card; projects can be submitted **only on the hackathon's event date** (API rejects off-day with 403; Submit page disables off-day). Legacy/no-date hackathons unrestricted; columns auto-migrated; 73 tests. | Update |
 | 2026-06-16 | v2.6.0 | Feature | Richer hackathons — Community & Support (Discord), Schedule, track descriptions, per-sponsor description/Tool-Access-&-Credits/Prizes (admin-editable); public Overview info display incl. judges with LinkedIn; 71 tests. | Update |

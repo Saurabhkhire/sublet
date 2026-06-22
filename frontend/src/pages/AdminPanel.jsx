@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { get, post, put, del } from '../api.js';
+import UserSearchInput from '../components/UserSearchInput.jsx';
 
 export default function AdminPanel() {
   const { meta, reload, hid } = useOutletContext();
@@ -156,82 +157,6 @@ function SponsorsEditor({ hid, reload }) {
   );
 }
 
-// Reusable search-as-you-type user picker. Calls onSelect(user) when a result is clicked.
-// Excludes user IDs in the `excludeIds` set.
-function UserSearchInput({ onSelect, excludeIds = new Set(), placeholder = 'Search users by email…' }) {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
-  const [open, setOpen] = useState(false);
-  const timer = useRef(null);
-  const wrapper = useRef(null);
-
-  useEffect(() => {
-    function onClickOutside(e) {
-      if (wrapper.current && !wrapper.current.contains(e.target)) setOpen(false);
-    }
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
-  }, []);
-
-  function handleChange(e) {
-    const q = e.target.value;
-    setQuery(q);
-    clearTimeout(timer.current);
-    if (!q.trim()) { setResults([]); setOpen(false); return; }
-    timer.current = setTimeout(async () => {
-      const rows = await get(`/api/admin/users?search=${encodeURIComponent(q)}`);
-      setResults(rows.filter((u) => !excludeIds.has(u.id)));
-      setOpen(true);
-    }, 280);
-  }
-
-  function pick(user) {
-    setQuery(''); setResults([]); setOpen(false);
-    onSelect(user);
-  }
-
-  return (
-    <div ref={wrapper} style={{ position: 'relative', flex: 1 }}>
-      <input
-        value={query}
-        onChange={handleChange}
-        onFocus={() => results.length > 0 && setOpen(true)}
-        placeholder={placeholder}
-        autoComplete="off"
-        style={{ width: '100%', marginTop: 0 }}
-      />
-      {open && results.length > 0 && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,.15)', maxHeight: 220, overflowY: 'auto',
-        }}>
-          {results.map((u) => (
-            <div key={u.id}
-              onMouseDown={(e) => { e.preventDefault(); pick(u); }}
-              style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 14 }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-2)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = ''}
-            >
-              {u.email}
-              {u.role !== 'user' && <span className="badge" style={{ marginLeft: 6 }}>{u.role}</span>}
-            </div>
-          ))}
-        </div>
-      )}
-      {open && results.length === 0 && query.trim() && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 6, padding: '8px 12px', fontSize: 14, color: 'var(--muted)',
-        }}>
-          No users found
-        </div>
-      )}
-    </div>
-  );
-}
-
 function JudgesSection({ hid }) {
   const [judges, setJudges] = useState([]);
   function load() { get(`/api/hackathons/${hid}/judges`).then(setJudges); }
@@ -249,7 +174,7 @@ function JudgesSection({ hid }) {
       <h3 style={{ marginTop: 0 }}>Judges · who can view &amp; score projects</h3>
       <p className="muted small">Search and add people who may see project details and submit judging scores.</p>
       <div className="row" style={{ marginBottom: 14 }}>
-        <UserSearchInput onSelect={add} excludeIds={judgeIds} placeholder="Search users by email to add as judge…" />
+        <UserSearchInput endpoint="/api/admin/users" onSelect={add} excludeIds={judgeIds} placeholder="Search users by email to add as judge…" />
       </div>
       {judges.length === 0 ? <span className="faint small">No judges assigned yet.</span> : (
         <div className="multiselect">
@@ -412,7 +337,7 @@ function ProjectRow({ project, hid, meta, expanded, onToggle, onSaved, onDeleted
               {participants.length === 0 && <span className="faint small">No participants</span>}
             </div>
             <div className="row" style={{ gap: 8 }}>
-              <UserSearchInput onSelect={addParticipant} excludeIds={participantIds} placeholder="Search to add participant…" />
+              <UserSearchInput endpoint="/api/admin/users" onSelect={addParticipant} excludeIds={participantIds} placeholder="Search to add participant…" />
             </div>
           </div>
 

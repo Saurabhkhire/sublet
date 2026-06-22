@@ -16,7 +16,9 @@ of `hackathon_judges` for that hackathon. Most resources are nested under
 
 ## Global meta & users
 - `GET /api/meta` — `{roles:[…], score_criteria:[…]}` (global constants).
-- `GET /api/meta/users` — auth; `[{id,email}]` directory for picking participants.
+- `GET /api/meta/users` — auth; `[{id,email}]` directory (non-admin users only). Supports
+  optional `?search=<query>` typeahead — returns ≤ 20 users whose email contains the query
+  (used by the Submit Project team-member search input). (Submit Project / WF 1)
 - `GET /api/admin/users` — admin; list all accounts ordered by email. Supports optional
   `?search=<query>` for typeahead — returns ≤ 20 users whose email contains the query (used by
   the judges and project-participants search inputs). (Admin / WF 4, WF 8)

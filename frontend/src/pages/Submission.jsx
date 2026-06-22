@@ -3,43 +3,58 @@ import { useOutletContext } from 'react-router-dom';
 import { get, post } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import MultiSelect from '../components/MultiSelect.jsx';
+import UserSearchInput from '../components/UserSearchInput.jsx';
 
 export default function Submission() {
   const { meta, hid } = useOutletContext();
   const { user } = useAuth();
-  const [users, setUsers] = useState([]);
   const [mine, setMine] = useState([]);
+  const [participants, setParticipants] = useState([]);
   const [form, setForm] = useState({
     name: '', short_description: '', demo_video_link: '', git_link: '',
-    participants: [], tracks: [], sponsors: [],
+    tracks: [], sponsors: [],
   });
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
 
   function reload() { get(`/api/hackathons/${hid}/projects`).then(setMine).catch(() => {}); }
-  useEffect(() => { get('/api/meta/users').then(setUsers); reload(); }, [hid]);
+  useEffect(() => { reload(); }, [hid]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  // Submissions are only allowed on the hackathon's event date (when one is set).
+  // Submissions are only allowed within the hackathon's 48-hour UTC window.
   const eventDate = (meta.hackathon.event_date || '').trim();
-  const todayLocal = (() => {
-    const d = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const todayUTC = new Date().toISOString().slice(0, 10);
+  const submissionOpen = (() => {
+    if (!eventDate) return true;
+    const deadline = new Date(eventDate + 'T00:00:00Z');
+    deadline.setDate(deadline.getDate() + 1);
+    const deadlineStr = deadline.toISOString().slice(0, 10);
+    return todayUTC >= eventDate && todayUTC <= deadlineStr;
   })();
-  const submissionOpen = !eventDate || eventDate === todayLocal;
+
+  function addParticipant(u) {
+    if (participants.some((p) => p.id === u.id)) return;
+    setParticipants((prev) => [...prev, { id: u.id, email: u.email }]);
+  }
+  function removeParticipant(id) { setParticipants((prev) => prev.filter((p) => p.id !== id)); }
 
   async function submit(e) {
     e.preventDefault();
     setError(''); setMsg('');
     try {
-      await post(`/api/hackathons/${hid}/projects`, form);
+      await post(`/api/hackathons/${hid}/projects`, {
+        ...form,
+        participants: participants.map((p) => p.id),
+      });
       setMsg('Project submitted!');
-      setForm({ name: '', short_description: '', demo_video_link: '', git_link: '', participants: [], tracks: [], sponsors: [] });
+      setForm({ name: '', short_description: '', demo_video_link: '', git_link: '', tracks: [], sponsors: [] });
+      setParticipants([]);
       reload();
     } catch (err) { setError(err.message); }
   }
+
+  const participantIds = new Set([user.id, ...participants.map((p) => p.id)]);
 
   return (
     <div className="stack">
@@ -69,8 +84,32 @@ export default function Submission() {
             <input value={form.git_link} onChange={(e) => set('git_link', e.target.value)} placeholder="https://github.com/…" />
           </label>
         </div>
-        <span className="field-label">Team members (besides you)</span>
-        <MultiSelect options={users.filter((u) => u.id !== user.id).map((u) => ({ value: u.id, label: u.email }))} value={form.participants} onChange={(v) => set('participants', v)} />
+
+        <div>
+          <span className="field-label">Team members (besides you)</span>
+          <p className="muted small" style={{ marginTop: 2, marginBottom: 8 }}>Type an email to search and add teammates one at a time.</p>
+          <div className="multiselect" style={{ marginBottom: 8 }}>
+            {participants.map((p) => (
+              <span key={p.id} className="badge" style={{ paddingRight: 4 }}>
+                {p.email}
+                <button
+                  type="button"
+                  className="link danger sm"
+                  style={{ padding: '0 4px' }}
+                  onClick={() => removeParticipant(p.id)}
+                >✕</button>
+              </span>
+            ))}
+            {participants.length === 0 && <span className="faint small">No teammates added yet — search below to add some.</span>}
+          </div>
+          <UserSearchInput
+            endpoint="/api/meta/users"
+            onSelect={addParticipant}
+            excludeIds={participantIds}
+            placeholder="Search teammates by email…"
+          />
+        </div>
+
         <span className="field-label">Tracks</span>
         <MultiSelect options={meta.tracks.map((t) => ({ value: t.id, label: t.name }))} value={form.tracks} onChange={(v) => set('tracks', v)} />
         <span className="field-label">Sponsors used</span>

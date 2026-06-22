@@ -228,22 +228,33 @@ you can reach out and form a team yourself. Before you opt in, this area shows a
 ## UI Page: `Hackathon · Submit Project`
 - **Where to find it:** `/h/:id/submit`.
 - **Purpose:** Submit one project (per person, per hackathon).
-- **What is on the screen:** A notice when it is **not** the hackathon day (submission closed);
-  Project name (mandatory); Short description; Demo video link; Git link; Team members (multi);
-  Tracks (multi); Sponsors used (multi); Submit (disabled off the event day); My Projects list.
-- **Validation:** name required; no member already on another project **in this hackathon**; the
-  current date must be the hackathon's event date (when one is set).
+- **What is on the screen:** A notice when submissions are closed; Project name (mandatory);
+  Short description; Demo video link; Git link; **Team members search** — type an email to find
+  and add teammates one at a time (added as removable chips, no list of all users shown);
+  Tracks (multi-select); Sponsors used (multi-select); Submit button (disabled when closed);
+  My Projects list below.
+- **Validation:** name required; no member already on another project **in this hackathon**;
+  today (UTC) must be within the hackathon's 48-hour submission window (event date + next day).
 
 ### Workflow 1: Submit a project
-**What the user sees** If the hackathon has an event date and today is not that day, a banner says
-submissions open only on that day and the Submit button is disabled. Otherwise fill and submit →
-"Project submitted!"; appears under My Projects; on conflict, which people clash and nothing saved.
-**What the system does** Is the event date set and today not that day? **YES:** reject (submission
-window closed). **NO:** Name? **NO:** stop. Add creator. Anyone already on a project here?
-**YES:** stop (no orphan). **NO:** save with team/tracks/sponsors.
-**Simple logic summary** IF not the hackathon day THEN stop; ELSE IF name empty THEN stop; ELSE IF
-a member clashes THEN stop; ELSE save.
-**Flow picture** `[Fill] -> {today = event day?} --NO--> [Closed]; --YES--> {name?} --NO--> [Error]; -> {clash?} --YES--> [409]; --NO--> [Saved]`
+**What the user sees** If the hackathon has an event date and the 48-hour window has not started
+or has passed, a banner says submissions are closed and the Submit button is disabled. Otherwise:
+fill in the form, search and add teammates by typing their email into the **Team members** search
+box and clicking a result — they appear as chips with ✕ to remove. Choose tracks and sponsors,
+then Submit → "Project submitted!"; the project appears under My Projects. On a participant
+conflict the clashing emails are listed and nothing is saved.
+**What the system does** Outside the 48-hour UTC window? **YES:** reject. **NO:** Name provided?
+**NO:** stop. Creator auto-added. Anyone already on a project here? **YES:** stop (no orphan).
+**NO:** save with team/tracks/sponsors.
+**Simple logic summary** IF outside submission window THEN stop; ELSE IF name empty THEN stop;
+ELSE IF a member clashes THEN stop; ELSE save.
+**Flow picture**
+```
+[Fill form] -> {window open?} --NO--> [Closed banner]
+            --YES--> [Search & add teammates] -> {name?} --NO--> [Error]
+                                              --YES--> {clash?} --YES--> [409]
+                                                                --NO-->  [Saved]
+```
 
 ### Workflow 2: View my projects
 **What the user sees** Your project(s) in this hackathon. **What the system does** Load only your
