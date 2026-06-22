@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { get, post, put, del } from '../api.js';
 
@@ -11,6 +11,7 @@ export default function AdminPanel() {
       <TracksEditor hid={hid} reload={reload} />
       <SponsorsEditor hid={hid} reload={reload} />
       <JudgesSection hid={hid} />
+      <ProjectsSection hid={hid} meta={meta} />
       <MatchingSection hid={hid} />
       <DangerZone hid={hid} name={meta.hackathon.name} />
       <SystemSection />
@@ -155,35 +156,100 @@ function SponsorsEditor({ hid, reload }) {
   );
 }
 
+// Reusable search-as-you-type user picker. Calls onSelect(user) when a result is clicked.
+// Excludes user IDs in the `excludeIds` set.
+function UserSearchInput({ onSelect, excludeIds = new Set(), placeholder = 'Search users by email…' }) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const timer = useRef(null);
+  const wrapper = useRef(null);
+
+  useEffect(() => {
+    function onClickOutside(e) {
+      if (wrapper.current && !wrapper.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, []);
+
+  function handleChange(e) {
+    const q = e.target.value;
+    setQuery(q);
+    clearTimeout(timer.current);
+    if (!q.trim()) { setResults([]); setOpen(false); return; }
+    timer.current = setTimeout(async () => {
+      const rows = await get(`/api/admin/users?search=${encodeURIComponent(q)}`);
+      setResults(rows.filter((u) => !excludeIds.has(u.id)));
+      setOpen(true);
+    }, 280);
+  }
+
+  function pick(user) {
+    setQuery(''); setResults([]); setOpen(false);
+    onSelect(user);
+  }
+
+  return (
+    <div ref={wrapper} style={{ position: 'relative', flex: 1 }}>
+      <input
+        value={query}
+        onChange={handleChange}
+        onFocus={() => results.length > 0 && setOpen(true)}
+        placeholder={placeholder}
+        autoComplete="off"
+        style={{ width: '100%', marginTop: 0 }}
+      />
+      {open && results.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,.15)', maxHeight: 220, overflowY: 'auto',
+        }}>
+          {results.map((u) => (
+            <div key={u.id}
+              onMouseDown={(e) => { e.preventDefault(); pick(u); }}
+              style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 14 }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-2)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = ''}
+            >
+              {u.email}
+              {u.role !== 'user' && <span className="badge" style={{ marginLeft: 6 }}>{u.role}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {open && results.length === 0 && query.trim() && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 6, padding: '8px 12px', fontSize: 14, color: 'var(--muted)',
+        }}>
+          No users found
+        </div>
+      )}
+    </div>
+  );
+}
+
 function JudgesSection({ hid }) {
   const [judges, setJudges] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [pick, setPick] = useState('');
-  function load() {
-    get(`/api/hackathons/${hid}/judges`).then(setJudges);
-    get('/api/admin/users').then((u) => setUsers(u.filter((x) => x.role !== 'admin')));
-  }
+  function load() { get(`/api/hackathons/${hid}/judges`).then(setJudges); }
   useEffect(load, [hid]);
-  async function add() {
-    if (!pick) return;
-    await post(`/api/hackathons/${hid}/judges`, { user_id: Number(pick) });
-    setPick(''); load();
+  async function add(user) {
+    await post(`/api/hackathons/${hid}/judges`, { user_id: user.id });
+    load();
   }
   async function remove(uid) { await del(`/api/hackathons/${hid}/judges/${uid}`); load(); }
 
   const judgeIds = new Set(judges.map((j) => j.id));
-  const available = users.filter((u) => !judgeIds.has(u.id));
 
   return (
     <section className="card">
       <h3 style={{ marginTop: 0 }}>Judges · who can view &amp; score projects</h3>
-      <p className="muted small">Select people who may see project details and submit judging scores in this hackathon.</p>
+      <p className="muted small">Search and add people who may see project details and submit judging scores.</p>
       <div className="row" style={{ marginBottom: 14 }}>
-        <select style={{ flex: 1, marginTop: 0 }} value={pick} onChange={(e) => setPick(e.target.value)}>
-          <option value="">— select a user —</option>
-          {available.map((u) => <option key={u.id} value={u.id}>{u.email}</option>)}
-        </select>
-        <button onClick={add} disabled={!pick}>Add judge</button>
+        <UserSearchInput onSelect={add} excludeIds={judgeIds} placeholder="Search users by email to add as judge…" />
       </div>
       {judges.length === 0 ? <span className="faint small">No judges assigned yet.</span> : (
         <div className="multiselect">
@@ -196,6 +262,197 @@ function JudgesSection({ hid }) {
         </div>
       )}
     </section>
+  );
+}
+
+// Admin section to view and fully edit any project in this hackathon.
+function ProjectsSection({ hid, meta }) {
+  const [projects, setProjects] = useState([]);
+  const [expanded, setExpanded] = useState(null);
+
+  function load() {
+    get(`/api/hackathons/${hid}/projects`).then(setProjects).catch(() => {});
+  }
+  useEffect(load, [hid]);
+
+  function toggle(id) { setExpanded((prev) => (prev === id ? null : id)); }
+
+  return (
+    <section className="card">
+      <h3 style={{ marginTop: 0 }}>Projects <span className="faint small">({projects.length})</span></h3>
+      {projects.length === 0
+        ? <span className="faint small">No projects submitted yet.</span>
+        : (
+          <div className="stack">
+            {projects.map((p) => (
+              <ProjectRow
+                key={p.id}
+                project={p}
+                hid={hid}
+                meta={meta}
+                expanded={expanded === p.id}
+                onToggle={() => toggle(p.id)}
+                onSaved={(updated) => {
+                  setProjects((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+                  setExpanded(null);
+                }}
+                onDeleted={() => { setProjects((prev) => prev.filter((x) => x.id !== p.id)); setExpanded(null); }}
+              />
+            ))}
+          </div>
+        )
+      }
+    </section>
+  );
+}
+
+function ProjectRow({ project, hid, meta, expanded, onToggle, onSaved, onDeleted }) {
+  const [form, setForm] = useState({
+    name: project.name,
+    short_description: project.short_description || '',
+    demo_video_link: project.demo_video_link || '',
+    git_link: project.git_link || '',
+  });
+  const [participants, setParticipants] = useState(project.participants || []);
+  const [tracks, setTracks] = useState((project.tracks || []).map((t) => t.id));
+  const [sponsors, setSponsors] = useState((project.sponsors || []).map((s) => s.id));
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  // Reset local state when expanding
+  useEffect(() => {
+    if (expanded) {
+      setForm({ name: project.name, short_description: project.short_description || '', demo_video_link: project.demo_video_link || '', git_link: project.git_link || '' });
+      setParticipants(project.participants || []);
+      setTracks((project.tracks || []).map((t) => t.id));
+      setSponsors((project.sponsors || []).map((s) => s.id));
+      setMsg(''); setErr('');
+    }
+  }, [expanded]);
+
+  function setF(k, v) { setForm((f) => ({ ...f, [k]: v })); }
+
+  function addParticipant(user) {
+    if (participants.some((p) => p.id === user.id)) return;
+    setParticipants((prev) => [...prev, { id: user.id, email: user.email }]);
+  }
+  function removeParticipant(uid) { setParticipants((prev) => prev.filter((p) => p.id !== uid)); }
+
+  function toggleTrack(id) {
+    setTracks((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  }
+  function toggleSponsor(id) {
+    setSponsors((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  }
+
+  async function save(e) {
+    e.preventDefault();
+    setBusy(true); setMsg(''); setErr('');
+    try {
+      const updated = await put(`/api/hackathons/${hid}/projects/${project.id}`, {
+        ...form,
+        participants: participants.map((p) => p.id),
+        tracks,
+        sponsors,
+      });
+      setMsg('Saved!');
+      setTimeout(() => { setMsg(''); onSaved(updated); }, 1000);
+    } catch (e) {
+      setErr(e.message || 'Save failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteProject() {
+    if (!confirm(`Delete project "${project.name}"? This also removes all scores.`)) return;
+    await del(`/api/hackathons/${hid}/projects/${project.id}`);
+    onDeleted();
+  }
+
+  const participantIds = new Set(participants.map((p) => p.id));
+
+  return (
+    <div className="card flat" style={{ background: 'var(--surface-2)', marginBottom: 0 }}>
+      <div className="spread" style={{ cursor: 'pointer' }} onClick={onToggle}>
+        <div>
+          <strong>{project.name}</strong>
+          <span className="faint small" style={{ marginLeft: 10 }}>
+            {(project.participants || []).map((p) => p.email).join(', ')}
+          </span>
+        </div>
+        <span className="faint small">{expanded ? '▲ collapse' : '▼ edit'}</span>
+      </div>
+
+      {expanded && (
+        <form onSubmit={save} style={{ marginTop: 14 }} className="stack">
+          <label className="small">Project name
+            <input value={form.name} onChange={(e) => setF('name', e.target.value)} required />
+          </label>
+          <label className="small">Short description
+            <textarea rows={2} value={form.short_description} onChange={(e) => setF('short_description', e.target.value)} placeholder="One-liner about the project" />
+          </label>
+          <label className="small">Demo video link
+            <input type="url" value={form.demo_video_link} onChange={(e) => setF('demo_video_link', e.target.value)} placeholder="https://…" />
+          </label>
+          <label className="small">Git / repo link
+            <input type="url" value={form.git_link} onChange={(e) => setF('git_link', e.target.value)} placeholder="https://github.com/…" />
+          </label>
+
+          <div>
+            <div className="small" style={{ fontWeight: 600, marginBottom: 6 }}>Participants</div>
+            <div className="multiselect" style={{ marginBottom: 8 }}>
+              {participants.map((p) => (
+                <span key={p.id} className="badge" style={{ paddingRight: 4 }}>
+                  {p.email}
+                  <button type="button" className="link danger sm" style={{ padding: '0 4px' }} onClick={() => removeParticipant(p.id)}>✕</button>
+                </span>
+              ))}
+              {participants.length === 0 && <span className="faint small">No participants</span>}
+            </div>
+            <div className="row" style={{ gap: 8 }}>
+              <UserSearchInput onSelect={addParticipant} excludeIds={participantIds} placeholder="Search to add participant…" />
+            </div>
+          </div>
+
+          {meta.tracks.length > 0 && (
+            <div>
+              <div className="small" style={{ fontWeight: 600, marginBottom: 6 }}>Tracks</div>
+              <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+                {meta.tracks.map((t) => (
+                  <label key={t.id} className="small" style={{ display: 'flex', alignItems: 'center', gap: 4, margin: 0 }}>
+                    <input type="checkbox" checked={tracks.includes(t.id)} onChange={() => toggleTrack(t.id)} style={{ width: 'auto', margin: 0 }} />
+                    {t.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {meta.sponsors.length > 0 && (
+            <div>
+              <div className="small" style={{ fontWeight: 600, marginBottom: 6 }}>Sponsors used</div>
+              <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+                {meta.sponsors.map((s) => (
+                  <label key={s.id} className="small" style={{ display: 'flex', alignItems: 'center', gap: 4, margin: 0 }}>
+                    <input type="checkbox" checked={sponsors.includes(s.id)} onChange={() => toggleSponsor(s.id)} style={{ width: 'auto', margin: 0 }} />
+                    {s.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="row" style={{ gap: 8, marginTop: 4 }}>
+            <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button>
+            <button type="button" className="danger outline sm" onClick={deleteProject}>Delete project</button>
+            {msg && <span className="success small">{msg}</span>}
+            {err && <span className="error small">{err}</span>}
+          </div>
+        </form>
+      )}
+    </div>
   );
 }
 

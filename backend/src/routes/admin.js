@@ -6,9 +6,17 @@ import { authRequired, adminRequired } from '../middleware/auth.js';
 const router = express.Router();
 router.use(authRequired, adminRequired);
 
-// Global user accounts. Per-hackathon judge access is managed under /hackathons/:hid/judges.
-router.get('/users', async (_req, res) => {
-  res.json(await all('SELECT id, email, linkedin, role, created_at FROM users ORDER BY id'));
+// Global user accounts. Supports optional ?search= for lightweight typeahead.
+router.get('/users', async (req, res) => {
+  const search = (req.query.search || '').trim();
+  if (search) {
+    const rows = await all(
+      'SELECT id, email, linkedin, role FROM users WHERE email LIKE ? ORDER BY email LIMIT 20',
+      [`%${search}%`]
+    );
+    return res.json(rows);
+  }
+  res.json(await all('SELECT id, email, linkedin, role, created_at FROM users ORDER BY email'));
 });
 
 router.post('/users', async (req, res) => {

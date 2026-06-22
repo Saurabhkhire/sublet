@@ -13,6 +13,27 @@ function formatEventDate(date) {
   return d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+// Convert a 24-hour "HH:MM" string to "h:MM AM/PM".
+function formatTime(t) {
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return t;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+// Parse text and wrap URLs in <a> tags.
+function linkify(text) {
+  if (!text) return null;
+  const parts = String(text).split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part)
+      ? <a key={i} href={part} target="_blank" rel="noreferrer">{part}</a>
+      : part
+  );
+}
+
 export default function Overview() {
   const { meta, hid } = useOutletContext();
   const h = meta.hackathon;
@@ -44,7 +65,7 @@ export default function Overview() {
           {(h.event_date || h.start_time || h.end_time) && (
             <p style={{ marginTop: 0 }}>
               📅 {formatEventDate(h.event_date)}
-              {(h.start_time || h.end_time) && ` · ${[h.start_time, h.end_time].filter(Boolean).join(' – ')}`}
+              {(h.start_time || h.end_time) && ` · ${[h.start_time, h.end_time].filter(Boolean).map(formatTime).join(' – ')}`}
             </p>
           )}
           {h.location && <p style={{ ...pre, marginBottom: 0 }}>📍 {h.location}</p>}
@@ -57,7 +78,7 @@ export default function Overview() {
         <section className="card">
           <h2 style={{ marginTop: 0 }}>Community &amp; Support</h2>
           <p className="muted small" style={{ marginTop: 0 }}>Join the channel for announcements and help.</p>
-          <p style={pre}>{h.support_info}</p>
+          <p style={pre}>{linkify(h.support_info)}</p>
         </section>
       )}
 
