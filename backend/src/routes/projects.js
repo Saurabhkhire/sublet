@@ -133,9 +133,11 @@ router.post('/', async (req, res) => {
 });
 
 // List: judges/admins see all (optional ?sponsor= filter); others see only their own.
+// Pass ?mine=1 to force participant-only filtering regardless of role (used by Submit page).
 router.get('/', async (req, res) => {
   let rows;
-  if (req.isJudge) {
+  const forceOwn = req.query.mine === '1';
+  if (req.isJudge && !forceOwn) {
     const sponsorId = req.query.sponsor;
     if (sponsorId) {
       rows = await all(

@@ -18,7 +18,7 @@ export default function Submission() {
   const [msg, setMsg] = useState('');
   const [editingId, setEditingId] = useState(null);
 
-  function reload() { get(`/api/hackathons/${hid}/projects`).then(setMine).catch(() => {}); }
+  function reload() { get(`/api/hackathons/${hid}/projects?mine=1`).then(setMine).catch(() => {}); }
   useEffect(() => { reload(); }, [hid]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
