@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { get, post } from '../api.js';
+import { get, post, put } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import MultiSelect from '../components/MultiSelect.jsx';
 import UserSearchInput from '../components/UserSearchInput.jsx';
@@ -17,20 +17,21 @@ export default function Submission() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
 
+  // Which project card is currently open for editing
+  const [editingId, setEditingId] = useState(null);
+
   function reload() { get(`/api/hackathons/${hid}/projects`).then(setMine).catch(() => {}); }
   useEffect(() => { reload(); }, [hid]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  // Submissions are only allowed within the hackathon's 48-hour UTC window.
   const eventDate = (meta.hackathon.event_date || '').trim();
   const todayUTC = new Date().toISOString().slice(0, 10);
   const submissionOpen = (() => {
     if (!eventDate) return true;
     const deadline = new Date(eventDate + 'T00:00:00Z');
     deadline.setDate(deadline.getDate() + 1);
-    const deadlineStr = deadline.toISOString().slice(0, 10);
-    return todayUTC >= eventDate && todayUTC <= deadlineStr;
+    return todayUTC >= eventDate && todayUTC <= deadline.toISOString().slice(0, 10);
   })();
 
   function addParticipant(u) {
@@ -92,22 +93,13 @@ export default function Submission() {
             {participants.map((p) => (
               <span key={p.id} className="badge" style={{ paddingRight: 4 }}>
                 {p.email}
-                <button
-                  type="button"
-                  className="link danger sm"
-                  style={{ padding: '0 4px' }}
-                  onClick={() => removeParticipant(p.id)}
-                >✕</button>
+                <button type="button" className="link danger sm" style={{ padding: '0 4px' }}
+                  onClick={() => removeParticipant(p.id)}>✕</button>
               </span>
             ))}
             {participants.length === 0 && <span className="faint small">No teammates added yet — search below to add some.</span>}
           </div>
-          <UserSearchInput
-            endpoint="/api/meta/users"
-            onSelect={addParticipant}
-            excludeIds={participantIds}
-            placeholder="Search teammates by email…"
-          />
+          <UserSearchInput endpoint="/api/meta/users" onSelect={addParticipant} excludeIds={participantIds} placeholder="Search teammates by email…" />
         </div>
 
         <span className="field-label">Tracks</span>
@@ -124,20 +116,153 @@ export default function Submission() {
       {mine.length === 0 ? (
         <div className="card empty"><p>No projects yet.</p></div>
       ) : (
-        <div className="grid">
+        <div className="stack">
           {mine.map((p) => (
-            <div key={p.id} className="card">
-              <h3 style={{ marginTop: 0 }}>{p.name}</h3>
-              <p className="muted small">{p.short_description}</p>
-              <div className="multiselect">
-                {p.tracks.map((t) => <span key={t.id} className="badge accent">{t.name}</span>)}
-                {p.sponsors.map((s) => <span key={s.id} className="badge">{s.name}</span>)}
-              </div>
-              <p className="faint small" style={{ marginTop: 10, marginBottom: 0 }}>Team: {p.participants.map((x) => x.email).join(', ')}</p>
-            </div>
+            <ProjectCard
+              key={p.id}
+              project={p}
+              hid={hid}
+              currentUserId={user.id}
+              isEditing={editingId === p.id}
+              onStartEdit={() => setEditingId(p.id)}
+              onCancelEdit={() => setEditingId(null)}
+              onSaved={(updated) => {
+                setMine((prev) => prev.map((x) => x.id === updated.id ? updated : x));
+                setEditingId(null);
+              }}
+            />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function ProjectCard({ project, hid, currentUserId, isEditing, onStartEdit, onCancelEdit, onSaved }) {
+  const [editForm, setEditForm] = useState({});
+  const [editParticipants, setEditParticipants] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  function startEdit() {
+    setEditForm({
+      name: project.name,
+      short_description: project.short_description || '',
+      demo_video_link: project.demo_video_link || '',
+      git_link: project.git_link || '',
+    });
+    setEditParticipants(project.participants.map((p) => ({ id: p.id, email: p.email })));
+    setEditError('');
+    onStartEdit();
+  }
+
+  function cancel() { setEditError(''); onCancelEdit(); }
+
+  const eSet = (k, v) => setEditForm((f) => ({ ...f, [k]: v }));
+
+  function addEditParticipant(u) {
+    if (editParticipants.some((p) => p.id === u.id)) return;
+    setEditParticipants((prev) => [...prev, { id: u.id, email: u.email }]);
+  }
+  function removeEditParticipant(id) {
+    if (id === currentUserId) return;
+    setEditParticipants((prev) => prev.filter((p) => p.id !== id));
+  }
+
+  async function save(e) {
+    e.preventDefault();
+    setEditError('');
+    setSaving(true);
+    try {
+      const updated = await put(`/api/hackathons/${hid}/projects/${project.id}`, {
+        ...editForm,
+        participants: editParticipants.map((p) => p.id),
+      });
+      onSaved(updated);
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const editParticipantIds = new Set(editParticipants.map((p) => p.id));
+
+  if (!isEditing) {
+    return (
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h3 style={{ marginTop: 0, marginBottom: 4 }}>{project.name}</h3>
+            <p className="muted small" style={{ marginTop: 0 }}>{project.short_description}</p>
+            <div className="multiselect" style={{ marginBottom: 6 }}>
+              {project.tracks.map((t) => <span key={t.id} className="badge accent">{t.name}</span>)}
+              {project.sponsors.map((s) => <span key={s.id} className="badge">{s.name}</span>)}
+            </div>
+            {project.demo_video_link && (
+              <a href={project.demo_video_link} target="_blank" rel="noreferrer" className="small" style={{ marginRight: 12 }}>▶ Demo video</a>
+            )}
+            {project.git_link && (
+              <a href={project.git_link} target="_blank" rel="noreferrer" className="small">⌥ Git repo</a>
+            )}
+            <p className="faint small" style={{ marginTop: 8, marginBottom: 0 }}>
+              Team: {project.participants.map((x) => x.email).join(', ')}
+            </p>
+          </div>
+          <button type="button" className="btn-outline sm" style={{ flexShrink: 0 }} onClick={startEdit}>Edit</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card" style={{ borderColor: 'var(--accent)' }}>
+      <h3 style={{ marginTop: 0, marginBottom: 16 }}>Edit project</h3>
+      <form onSubmit={save} className="stack" style={{ gap: 14 }}>
+        <label>Project name
+          <input value={editForm.name} onChange={(e) => eSet('name', e.target.value)} placeholder="Project name" required />
+        </label>
+        <label>Short description
+          <textarea rows={2} value={editForm.short_description} onChange={(e) => eSet('short_description', e.target.value)} placeholder="One or two sentences" />
+        </label>
+        <div className="row" style={{ gap: 16 }}>
+          <label style={{ flex: 1, minWidth: 180 }}>Demo video link
+            <input value={editForm.demo_video_link} onChange={(e) => eSet('demo_video_link', e.target.value)} placeholder="https://…" />
+          </label>
+          <label style={{ flex: 1, minWidth: 180 }}>Git repository link
+            <input value={editForm.git_link} onChange={(e) => eSet('git_link', e.target.value)} placeholder="https://github.com/…" />
+          </label>
+        </div>
+
+        <div>
+          <span className="field-label">Team members</span>
+          <p className="muted small" style={{ marginTop: 2, marginBottom: 8 }}>You (the creator) cannot be removed. Search to add more.</p>
+          <div className="multiselect" style={{ marginBottom: 8 }}>
+            {editParticipants.map((p) => (
+              <span key={p.id} className="badge" style={{ paddingRight: 4 }}>
+                {p.email}
+                {p.id !== currentUserId && (
+                  <button type="button" className="link danger sm" style={{ padding: '0 4px' }}
+                    onClick={() => removeEditParticipant(p.id)}>✕</button>
+                )}
+              </span>
+            ))}
+          </div>
+          <UserSearchInput
+            endpoint="/api/meta/users"
+            onSelect={addEditParticipant}
+            excludeIds={editParticipantIds}
+            placeholder="Search teammates by email…"
+          />
+        </div>
+
+        {editError && <p className="error" style={{ margin: 0 }}>{editError}</p>}
+
+        <div className="row" style={{ gap: 10, marginTop: 4 }}>
+          <button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+          <button type="button" className="btn-outline" onClick={cancel}>Cancel</button>
+        </div>
+      </form>
     </div>
   );
 }

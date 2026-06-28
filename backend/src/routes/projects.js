@@ -178,12 +178,20 @@ router.get('/:projectId', async (req, res) => {
   res.json(detail);
 });
 
-// Admin: edit a project's details, participants, tracks, and sponsors.
-router.put('/:projectId', adminOnly, async (req, res) => {
-  const project = await get('SELECT id FROM projects WHERE id = ? AND hackathon_id = ?', [
+// Edit a project's details and participants.
+// Admin: may also change tracks and sponsors, and may edit any project.
+// Creator: may edit their own project's name, description, links, and participants.
+router.put('/:projectId', async (req, res) => {
+  const project = await get('SELECT id, created_by FROM projects WHERE id = ? AND hackathon_id = ?', [
     req.params.projectId, req.hackathonId,
   ]);
   if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const isAdmin = req.user.role === 'admin';
+  const isCreator = project.created_by === req.user.id;
+  if (!isAdmin && !isCreator) {
+    return res.status(403).json({ error: 'You do not have permission to edit this project' });
+  }
 
   const { name, short_description, demo_video_link, git_link, participants, tracks, sponsors } = req.body || {};
 
@@ -196,27 +204,46 @@ router.put('/:projectId', adminOnly, async (req, res) => {
   }
 
   if (Array.isArray(participants)) {
+    // Clash check: any incoming user already on a *different* project in this hackathon?
+    const clashes = [];
+    for (const uid of [...new Set(participants.map(Number))].filter(Boolean)) {
+      const existing = await get(
+        'SELECT project_id FROM project_participants WHERE hackathon_id = ? AND user_id = ? AND project_id <> ?',
+        [req.hackathonId, uid, project.id]
+      );
+      if (existing) {
+        const u = await get('SELECT email FROM users WHERE id = ?', [uid]);
+        clashes.push(u ? u.email : `user ${uid}`);
+      }
+    }
+    if (clashes.length > 0) {
+      return res.status(409).json({
+        error: `These participants are already on another project: ${clashes.join(', ')}`,
+      });
+    }
     await run('DELETE FROM project_participants WHERE project_id = ?', [project.id]);
     for (const uid of [...new Set(participants.map(Number))].filter(Boolean)) {
       try {
         await insert('project_participants', { hackathon_id: req.hackathonId, project_id: project.id, user_id: uid });
-      } catch { /* ignore duplicate */ }
+      } catch { /* concurrent race guard — unique constraint */ }
     }
   }
 
-  if (Array.isArray(tracks)) {
-    await run('DELETE FROM project_tracks WHERE project_id = ?', [project.id]);
-    const validTracks = (await all('SELECT id FROM tracks WHERE hackathon_id = ?', [req.hackathonId])).map((t) => t.id);
-    for (const tid of [...new Set(tracks.map(Number))]) {
-      if (validTracks.includes(tid)) await run('INSERT INTO project_tracks (project_id, track_id) VALUES (?, ?)', [project.id, tid]);
+  // Tracks and sponsors: admin only.
+  if (isAdmin) {
+    if (Array.isArray(tracks)) {
+      await run('DELETE FROM project_tracks WHERE project_id = ?', [project.id]);
+      const validTracks = (await all('SELECT id FROM tracks WHERE hackathon_id = ?', [req.hackathonId])).map((t) => t.id);
+      for (const tid of [...new Set(tracks.map(Number))]) {
+        if (validTracks.includes(tid)) await run('INSERT INTO project_tracks (project_id, track_id) VALUES (?, ?)', [project.id, tid]);
+      }
     }
-  }
-
-  if (Array.isArray(sponsors)) {
-    await run('DELETE FROM project_sponsors WHERE project_id = ?', [project.id]);
-    const validSponsors = (await all('SELECT id FROM sponsors WHERE hackathon_id = ?', [req.hackathonId])).map((s) => s.id);
-    for (const sid of [...new Set(sponsors.map(Number))]) {
-      if (validSponsors.includes(sid)) await run('INSERT INTO project_sponsors (project_id, sponsor_id) VALUES (?, ?)', [project.id, sid]);
+    if (Array.isArray(sponsors)) {
+      await run('DELETE FROM project_sponsors WHERE project_id = ?', [project.id]);
+      const validSponsors = (await all('SELECT id FROM sponsors WHERE hackathon_id = ?', [req.hackathonId])).map((s) => s.id);
+      for (const sid of [...new Set(sponsors.map(Number))]) {
+        if (validSponsors.includes(sid)) await run('INSERT INTO project_sponsors (project_id, sponsor_id) VALUES (?, ?)', [project.id, sid]);
+      }
     }
   }
 
