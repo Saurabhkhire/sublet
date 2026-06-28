@@ -16,8 +16,6 @@ export default function Submission() {
   });
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
-
-  // Which project card is currently open for editing
   const [editingId, setEditingId] = useState(null);
 
   function reload() { get(`/api/hackathons/${hid}/projects`).then(setMine).catch(() => {}); }
@@ -123,6 +121,7 @@ export default function Submission() {
               project={p}
               hid={hid}
               currentUserId={user.id}
+              meta={meta}
               isEditing={editingId === p.id}
               onStartEdit={() => setEditingId(p.id)}
               onCancelEdit={() => setEditingId(null)}
@@ -138,9 +137,11 @@ export default function Submission() {
   );
 }
 
-function ProjectCard({ project, hid, currentUserId, isEditing, onStartEdit, onCancelEdit, onSaved }) {
+function ProjectCard({ project, hid, currentUserId, meta, isEditing, onStartEdit, onCancelEdit, onSaved }) {
   const [editForm, setEditForm] = useState({});
   const [editParticipants, setEditParticipants] = useState([]);
+  const [editTracks, setEditTracks] = useState([]);
+  const [editSponsors, setEditSponsors] = useState([]);
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -152,6 +153,8 @@ function ProjectCard({ project, hid, currentUserId, isEditing, onStartEdit, onCa
       git_link: project.git_link || '',
     });
     setEditParticipants(project.participants.map((p) => ({ id: p.id, email: p.email })));
+    setEditTracks(project.tracks.map((t) => t.id));
+    setEditSponsors(project.sponsors.map((s) => s.id));
     setEditError('');
     onStartEdit();
   }
@@ -165,18 +168,23 @@ function ProjectCard({ project, hid, currentUserId, isEditing, onStartEdit, onCa
     setEditParticipants((prev) => [...prev, { id: u.id, email: u.email }]);
   }
   function removeEditParticipant(id) {
-    if (id === currentUserId) return;
     setEditParticipants((prev) => prev.filter((p) => p.id !== id));
   }
 
   async function save(e) {
     e.preventDefault();
     setEditError('');
+    if (editParticipants.length === 0) {
+      setEditError('A project must have at least one team member.');
+      return;
+    }
     setSaving(true);
     try {
       const updated = await put(`/api/hackathons/${hid}/projects/${project.id}`, {
         ...editForm,
         participants: editParticipants.map((p) => p.id),
+        tracks: editTracks,
+        sponsors: editSponsors,
       });
       onSaved(updated);
     } catch (err) {
@@ -236,23 +244,42 @@ function ProjectCard({ project, hid, currentUserId, isEditing, onStartEdit, onCa
 
         <div>
           <span className="field-label">Team members</span>
-          <p className="muted small" style={{ marginTop: 2, marginBottom: 8 }}>You (the creator) cannot be removed. Search to add more.</p>
+          <p className="muted small" style={{ marginTop: 2, marginBottom: 8 }}>All team members can edit. Remove anyone or search to add more.</p>
           <div className="multiselect" style={{ marginBottom: 8 }}>
             {editParticipants.map((p) => (
               <span key={p.id} className="badge" style={{ paddingRight: 4 }}>
                 {p.email}
-                {p.id !== currentUserId && (
-                  <button type="button" className="link danger sm" style={{ padding: '0 4px' }}
-                    onClick={() => removeEditParticipant(p.id)}>✕</button>
-                )}
+                <button type="button" className="link danger sm" style={{ padding: '0 4px' }}
+                  onClick={() => removeEditParticipant(p.id)}>✕</button>
               </span>
             ))}
+            {editParticipants.length === 0 && (
+              <span className="faint small">No team members — add at least one.</span>
+            )}
           </div>
           <UserSearchInput
             endpoint="/api/meta/users"
             onSelect={addEditParticipant}
             excludeIds={editParticipantIds}
             placeholder="Search teammates by email…"
+          />
+        </div>
+
+        <div>
+          <span className="field-label">Tracks</span>
+          <MultiSelect
+            options={meta.tracks.map((t) => ({ value: t.id, label: t.name }))}
+            value={editTracks}
+            onChange={setEditTracks}
+          />
+        </div>
+
+        <div>
+          <span className="field-label">Sponsors used</span>
+          <MultiSelect
+            options={meta.sponsors.map((s) => ({ value: s.id, label: s.name }))}
+            value={editSponsors}
+            onChange={setEditSponsors}
           />
         </div>
 

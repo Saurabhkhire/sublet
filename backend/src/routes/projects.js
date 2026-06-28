@@ -188,8 +188,11 @@ router.put('/:projectId', async (req, res) => {
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
   const isAdmin = req.user.role === 'admin';
-  const isCreator = project.created_by === req.user.id;
-  if (!isAdmin && !isCreator) {
+  const membership = await get(
+    'SELECT 1 FROM project_participants WHERE project_id = ? AND user_id = ?',
+    [project.id, req.user.id]
+  );
+  if (!isAdmin && !membership) {
     return res.status(403).json({ error: 'You do not have permission to edit this project' });
   }
 
@@ -229,21 +232,18 @@ router.put('/:projectId', async (req, res) => {
     }
   }
 
-  // Tracks and sponsors: admin only.
-  if (isAdmin) {
-    if (Array.isArray(tracks)) {
-      await run('DELETE FROM project_tracks WHERE project_id = ?', [project.id]);
-      const validTracks = (await all('SELECT id FROM tracks WHERE hackathon_id = ?', [req.hackathonId])).map((t) => t.id);
-      for (const tid of [...new Set(tracks.map(Number))]) {
-        if (validTracks.includes(tid)) await run('INSERT INTO project_tracks (project_id, track_id) VALUES (?, ?)', [project.id, tid]);
-      }
+  if (Array.isArray(tracks)) {
+    await run('DELETE FROM project_tracks WHERE project_id = ?', [project.id]);
+    const validTracks = (await all('SELECT id FROM tracks WHERE hackathon_id = ?', [req.hackathonId])).map((t) => t.id);
+    for (const tid of [...new Set(tracks.map(Number))]) {
+      if (validTracks.includes(tid)) await run('INSERT INTO project_tracks (project_id, track_id) VALUES (?, ?)', [project.id, tid]);
     }
-    if (Array.isArray(sponsors)) {
-      await run('DELETE FROM project_sponsors WHERE project_id = ?', [project.id]);
-      const validSponsors = (await all('SELECT id FROM sponsors WHERE hackathon_id = ?', [req.hackathonId])).map((s) => s.id);
-      for (const sid of [...new Set(sponsors.map(Number))]) {
-        if (validSponsors.includes(sid)) await run('INSERT INTO project_sponsors (project_id, sponsor_id) VALUES (?, ?)', [project.id, sid]);
-      }
+  }
+  if (Array.isArray(sponsors)) {
+    await run('DELETE FROM project_sponsors WHERE project_id = ?', [project.id]);
+    const validSponsors = (await all('SELECT id FROM sponsors WHERE hackathon_id = ?', [req.hackathonId])).map((s) => s.id);
+    for (const sid of [...new Set(sponsors.map(Number))]) {
+      if (validSponsors.includes(sid)) await run('INSERT INTO project_sponsors (project_id, sponsor_id) VALUES (?, ?)', [project.id, sid]);
     }
   }
 
