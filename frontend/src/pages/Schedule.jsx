@@ -108,6 +108,7 @@ export default function Schedule() {
   const [isPaused, setIsPaused]     = useState(false);
   const [currentId, setCurrentId]   = useState(null);
   const [elapsed, setElapsed]       = useState(0);
+  const [liveStartedAt, setLiveStartedAt] = useState(null); // real clock time when Start was pressed
 
   const timerRef    = useRef(null);
   const alerted2    = useRef(false);
@@ -131,7 +132,16 @@ export default function Schedule() {
   const prevSpeaker = speakers.slice(0, currentIdx).filter((s) => s.status === 'completed').slice(-1)[0] || null;
   const nextSpeaker = speakers.find((s, i) => i > currentIdx && isEligible(s)) || null;
 
-  const scheduledTimes = calcScheduledTimes(speakers, meta.hackathon.start_time || '');
+  // When live, anchor all times to the actual clock time Start was pressed.
+  // When not live, use the hackathon's configured start_time (tentative).
+  const liveBase = liveStartedAt
+    ? `${String(liveStartedAt.getHours()).padStart(2, '0')}:${String(liveStartedAt.getMinutes()).padStart(2, '0')}`
+    : null;
+  const scheduledTimes = calcScheduledTimes(
+    // When live, ignore per-speaker scheduled_start overrides so everything cascades from the real start
+    isLive ? speakers.map((s) => ({ ...s, scheduled_start: '' })) : speakers,
+    liveBase ?? (meta.hackathon.start_time || ''),
+  );
   const timerColor     = isOvertime ? '#dc2626' : timeLeft <= 60 ? '#d97706' : 'inherit';
 
   // ── data ──────────────────────────────────────────────────────────────────
@@ -176,6 +186,7 @@ export default function Schedule() {
     const first = speakers.find(isEligible);
     if (!first) return;
     setIsLive(true);
+    setLiveStartedAt(new Date());
     await activateSpeaker(speakers, first.id);
   }
 
@@ -184,6 +195,7 @@ export default function Schedule() {
     // If there's a current speaker mid-talk, leave their status as-is (don't mark them done)
     setIsLive(false);
     setCurrentId(null);
+    setLiveStartedAt(null);
   }
 
   async function restartEvent() {
@@ -192,6 +204,7 @@ export default function Schedule() {
     setIsLive(false);
     setCurrentId(null);
     setElapsed(0);
+    setLiveStartedAt(null);
     for (const sp of speakers) {
       if (sp.status !== 'scheduled') {
         await put(`/api/hackathons/${hid}/speakers/${sp.id}`, {
