@@ -346,13 +346,13 @@ export default function Schedule() {
               ● LIVE
             </span>
           )}
-          {isAdmin && isLive && (
+          {isAdmin && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
               <input type="checkbox" checked={autoStart} onChange={() => {
                 const n = !autoStart; setAutoStart(n);
                 try { localStorage.setItem('schedAutoStart', String(n)); } catch {}
               }} />
-              Auto-start next
+              Auto-start next speaker
             </label>
           )}
           {canStart    && <button style={B} onClick={startEvent}>▶ Start Event</button>}
