@@ -531,7 +531,6 @@ function SpeakersSection({ hid }) {
   }
 
   async function deleteSpeaker(id) {
-    if (!confirm('Remove this item from the schedule?')) return;
     try { await del(`${base}/${id}`); await load(); } catch (err) { setError(err.message); }
   }
 
