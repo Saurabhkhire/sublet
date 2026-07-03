@@ -54,6 +54,7 @@ export default function Submission() {
   }
 
   const participantIds = new Set([user.id, ...participants.map((p) => p.id)]);
+  const alreadyOnProject = mine.length > 0;
 
   return (
     <div className="stack">
@@ -68,47 +69,55 @@ export default function Submission() {
         </div>
       )}
 
-      <form onSubmit={submit} className="card">
-        <label>Project name
-          <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Your project name" />
-        </label>
-        <label>Short description
-          <textarea rows={2} value={form.short_description} onChange={(e) => set('short_description', e.target.value)} placeholder="One or two sentences" />
-        </label>
-        <div className="row" style={{ gap: 16 }}>
-          <label style={{ flex: 1, minWidth: 220 }}>Demo video link
-            <input value={form.demo_video_link} onChange={(e) => set('demo_video_link', e.target.value)} placeholder="https://…" />
-          </label>
-          <label style={{ flex: 1, minWidth: 220 }}>Git repository link
-            <input value={form.git_link} onChange={(e) => set('git_link', e.target.value)} placeholder="https://github.com/…" />
-          </label>
+      {alreadyOnProject && (
+        <div className="card" style={{ borderColor: 'var(--accent)' }}>
+          <p style={{ margin: 0 }}>✅ You're already on a project for this hackathon. Use the <strong>Edit</strong> button below to make changes.</p>
         </div>
+      )}
 
-        <div>
-          <span className="field-label">Team members (besides you)</span>
-          <p className="muted small" style={{ marginTop: 2, marginBottom: 8 }}>Type an email to search and add teammates one at a time.</p>
-          <div className="multiselect" style={{ marginBottom: 8 }}>
-            {participants.map((p) => (
-              <span key={p.id} className="badge" style={{ paddingRight: 4 }}>
-                {p.email}
-                <button type="button" className="link danger sm" style={{ padding: '0 4px' }}
-                  onClick={() => removeParticipant(p.id)}>✕</button>
-              </span>
-            ))}
-            {participants.length === 0 && <span className="faint small">No teammates added yet — search below to add some.</span>}
+      {!alreadyOnProject && (
+        <form onSubmit={submit} className="card">
+          <label>Project name
+            <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Your project name" />
+          </label>
+          <label>Short description
+            <textarea rows={2} value={form.short_description} onChange={(e) => set('short_description', e.target.value)} placeholder="One or two sentences" />
+          </label>
+          <div className="row" style={{ gap: 16 }}>
+            <label style={{ flex: 1, minWidth: 220 }}>Demo video link
+              <input value={form.demo_video_link} onChange={(e) => set('demo_video_link', e.target.value)} placeholder="https://…" />
+            </label>
+            <label style={{ flex: 1, minWidth: 220 }}>Git repository link
+              <input value={form.git_link} onChange={(e) => set('git_link', e.target.value)} placeholder="https://github.com/…" />
+            </label>
           </div>
-          <UserSearchInput endpoint="/api/meta/users" onSelect={addParticipant} excludeIds={participantIds} placeholder="Search teammates by email…" />
-        </div>
 
-        <span className="field-label">Tracks</span>
-        <MultiSelect options={meta.tracks.map((t) => ({ value: t.id, label: t.name }))} value={form.tracks} onChange={(v) => set('tracks', v)} />
-        <span className="field-label">Sponsors used</span>
-        <MultiSelect options={meta.sponsors.map((s) => ({ value: s.id, label: s.name }))} value={form.sponsors} onChange={(v) => set('sponsors', v)} />
+          <div>
+            <span className="field-label">Team members (besides you)</span>
+            <p className="muted small" style={{ marginTop: 2, marginBottom: 8 }}>Type an email to search and add teammates one at a time.</p>
+            <div className="multiselect" style={{ marginBottom: 8 }}>
+              {participants.map((p) => (
+                <span key={p.id} className="badge" style={{ paddingRight: 4 }}>
+                  {p.email}
+                  <button type="button" className="link danger sm" style={{ padding: '0 4px' }}
+                    onClick={() => removeParticipant(p.id)}>✕</button>
+                </span>
+              ))}
+              {participants.length === 0 && <span className="faint small">No teammates added yet — search below to add some.</span>}
+            </div>
+            <UserSearchInput endpoint="/api/meta/users" onSelect={addParticipant} excludeIds={participantIds} placeholder="Search teammates by email…" />
+          </div>
 
-        {error && <p className="error" style={{ marginTop: 14 }}>{error}</p>}
-        {msg && <p className="success" style={{ marginTop: 14 }}>{msg}</p>}
-        <button type="submit" style={{ marginTop: 16 }} disabled={!submissionOpen}>Submit project</button>
-      </form>
+          <span className="field-label">Tracks</span>
+          <MultiSelect options={meta.tracks.map((t) => ({ value: t.id, label: t.name }))} value={form.tracks} onChange={(v) => set('tracks', v)} />
+          <span className="field-label">Sponsors used</span>
+          <MultiSelect options={meta.sponsors.map((s) => ({ value: s.id, label: s.name }))} value={form.sponsors} onChange={(v) => set('sponsors', v)} />
+
+          {error && <p className="error" style={{ marginTop: 14 }}>{error}</p>}
+          {msg && <p className="success" style={{ marginTop: 14 }}>{msg}</p>}
+          <button type="submit" style={{ marginTop: 16 }} disabled={!submissionOpen}>Submit project</button>
+        </form>
+      )}
 
       <h2>My Projects</h2>
       {mine.length === 0 ? (

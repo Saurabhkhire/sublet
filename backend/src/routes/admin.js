@@ -58,6 +58,21 @@ router.delete('/users', async (_req, res) => {
   res.json({ ok: true, deleted_users: users.length, deleted_projects: orphans.length });
 });
 
+// Reset a single user's password (admin only).
+router.put('/users/:id', async (req, res) => {
+  const target = await get('SELECT id, role FROM users WHERE id = ?', [req.params.id]);
+  if (!target) return res.status(404).json({ error: 'User not found' });
+  const { password } = req.body || {};
+  if (!password || !String(password).trim()) {
+    return res.status(400).json({ error: 'New password is required' });
+  }
+  await run('UPDATE users SET password_hash = ? WHERE id = ?', [
+    bcrypt.hashSync(String(password).trim(), 10),
+    target.id,
+  ]);
+  res.json({ ok: true });
+});
+
 router.delete('/users/:id', async (req, res) => {
   const target = await get('SELECT * FROM users WHERE id = ?', [req.params.id]);
   if (!target) return res.status(404).json({ error: 'User not found' });

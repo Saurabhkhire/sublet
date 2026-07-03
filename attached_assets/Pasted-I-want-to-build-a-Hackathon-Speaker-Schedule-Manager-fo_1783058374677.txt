@@ -1,0 +1,166 @@
+I want to build a Hackathon Speaker Schedule Manager for event organizers. The goal is to make it easy to run a live event without manually tracking time or changing the schedule.
+
+Core Requirements
+
+Create a modern, responsive interface with a clean dashboard.
+
+The application should have the following features:
+
+Schedule Management
+Display all speakers in chronological order.
+Each schedule item includes:
+Speaker name
+Talk title
+Duration
+Scheduled start time
+Status (Scheduled, Speaking, Completed, Missed, Skipped)
+Live Event Mode
+
+When the organizer clicks Start Event:
+
+The first speaker becomes active.
+A countdown timer starts for that speaker.
+When the timer reaches zero:
+Automatically mark the speaker as Completed.
+Move to the next speaker.
+Start the next timer automatically.
+
+Display:
+
+Current Speaker
+Previous Speaker
+Up Next
+Overall progress (e.g., 5 of 18 completed)
+Controls During a Talk
+
+Each active speaker should have these controls:
+
+▶ Start
+⏸ Pause
+Resume
+✅ End Early
+⏭ Next Speaker
+➕ Add 1 minute
+➕ Add 2 minutes
+➕ Add 5 minutes
+✏ Edit duration
+Miss Speaker (Dynamic Rescheduling)
+
+This is an important feature.
+
+If the scheduled speaker is absent, the organizer can click Miss.
+
+The application should:
+
+Skip the current speaker immediately.
+Start the next speaker.
+Move the missed speaker lower in the schedule instead of deleting them.
+Mark them with a "Missed" badge.
+Preserve all completed talks.
+
+Example:
+
+Before:
+
+Alice
+Bob
+Charlie
+David
+
+Bob is absent.
+
+After clicking Miss:
+
+Alice ✅
+Charlie
+David
+Bob (Missed)
+
+The organizer should also be able to drag the missed speaker anywhere later in the schedule.
+
+Skip Speaker
+
+Unlike Miss:
+
+Skip permanently removes the speaker from today's running schedule.
+Mark as Skipped.
+Immediately continue to the next speaker.
+Live Rescheduling
+
+While the event is running:
+
+Support drag-and-drop reordering.
+The timer should continue running while reordering.
+Any schedule changes should immediately update upcoming start times.
+Automatic Time Adjustment
+
+The application should continuously calculate:
+
+Planned start time
+Actual start time
+Time ahead or behind schedule
+
+If someone finishes early:
+
+Option to start the next talk immediately
+Or preserve the original schedule
+
+If talks run over:
+
+Shift remaining scheduled times automatically.
+Timeline View
+
+Display a timeline like:
+
+09:00 Opening ✅
+
+09:10 AI Demo ✅
+
+09:20 Robotics 🎤 LIVE
+
+09:35 Security
+
+09:45 Awards
+
+Highlight:
+
+Current session
+Completed sessions
+Missed sessions
+Skipped sessions
+Timer
+
+The timer should:
+
+Show a large countdown.
+Turn orange when under 1 minute.
+Turn red when time reaches zero.
+Continue counting upward in overtime (e.g., +00:45).
+
+Play a sound when:
+
+2 minutes remain
+Time expires
+Dashboard
+
+Show:
+
+Total talks
+Completed
+Remaining
+Missed
+Skipped
+Current speaker
+Next speaker
+Event progress
+Overall delay or time saved
+
+Example:
+
+Completed: 8/20
+
+Current: Sarah
+
+Next: Mike
+
+Running 6 minutes behind schedule
