@@ -13,6 +13,9 @@ import Submission from './pages/Submission.jsx';
 import Judging from './pages/Judging.jsx';
 import AdminPanel from './pages/AdminPanel.jsx';
 import Schedule from './pages/Schedule.jsx';
+import JudgingGroups from './pages/JudgingGroups.jsx';
+import DemoSchedule from './pages/DemoSchedule.jsx';
+import Winners from './pages/Winners.jsx';
 
 function Protected({ children, need }) {
   const { user, loading, isAdmin } = useAuth();
@@ -39,6 +42,9 @@ export default function App() {
           <Route path="submit" element={<Submission />} />
           <Route path="judging" element={<Judging />} />
           <Route path="schedule" element={<Schedule />} />
+          <Route path="judging-groups" element={<JudgingGroups />} />
+          <Route path="demo" element={<DemoSchedule />} />
+          <Route path="winners" element={<Winners />} />
           <Route path="admin" element={<AdminPanel />} />
         </Route>
         <Route path="*" element={<div className="page">Not found.</div>} />

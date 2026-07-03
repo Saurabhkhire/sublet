@@ -98,6 +98,22 @@ router.post('/', async (req, res) => {
     });
   }
 
+  // Determine judge group assignment (auto-assign if groups are already set up)
+  let autoJudgeGroup = '';
+  const jconfig = await get(
+    "SELECT * FROM judging_config WHERE hackathon_id = ? AND assigned_at != ''",
+    [req.hackathonId]
+  );
+  if (jconfig && jconfig.group_count > 0) {
+    const alreadyAssigned = await all(
+      "SELECT id FROM projects WHERE hackathon_id = ? AND judge_group != ''",
+      [req.hackathonId]
+    );
+    const JLABELS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+    const idx = alreadyAssigned.length % jconfig.group_count;
+    autoJudgeGroup = idx < JLABELS.length ? JLABELS[idx] : `G${idx + 1}`;
+  }
+
   const projectId = await insert('projects', {
     hackathon_id: req.hackathonId,
     name: String(name).trim(),
@@ -106,6 +122,8 @@ router.post('/', async (req, res) => {
     git_link: git_link || '',
     created_by: req.user.id,
     created_at: new Date().toISOString(),
+    judge_group: autoJudgeGroup,
+    award_tag: '',
   });
 
   // UNIQUE(hackathon_id, user_id) is the real guard against a concurrent race.
@@ -130,6 +148,17 @@ router.post('/', async (req, res) => {
     if (validSponsors.includes(sid)) await run('INSERT INTO project_sponsors (project_id, sponsor_id) VALUES (?, ?)', [projectId, sid]);
   }
   res.status(201).json(await loadProjectDetail(projectId));
+});
+
+// Public winners list — projects with a non-empty award_tag (any logged-in user).
+router.get('/winners', async (req, res) => {
+  const rows = await all(
+    "SELECT * FROM projects WHERE hackathon_id = ? AND award_tag != '' ORDER BY id",
+    [req.hackathonId]
+  );
+  const detailed = [];
+  for (const r of rows) detailed.push(await loadProjectDetail(r.id));
+  res.json(detailed);
 });
 
 // List: judges/admins see all (optional ?sponsor= filter); others see only their own.
@@ -250,6 +279,15 @@ router.put('/:projectId', async (req, res) => {
   }
 
   res.json(await loadProjectDetail(project.id));
+});
+
+// Set or clear the award tag on a project (admin only).
+router.put('/:projectId/award', adminOnly, async (req, res) => {
+  const project = await get('SELECT id FROM projects WHERE id = ? AND hackathon_id = ?', [req.params.projectId, req.hackathonId]);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  const { award_tag } = req.body || {};
+  await run('UPDATE projects SET award_tag = ? WHERE id = ?', [String(award_tag || '').trim(), project.id]);
+  res.json({ ok: true });
 });
 
 // Delete a single project (admin moderation).

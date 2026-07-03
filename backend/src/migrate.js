@@ -128,6 +128,84 @@ export async function migrateSpeakerBreak() {
   }
 }
 
+// Adds judge_group/attended_at to hackathon_judges, judge_group/award_tag to projects,
+// and creates the judging_config table.
+export async function migrateJudgingGroups() {
+  if (isPg) {
+    await run("ALTER TABLE hackathon_judges ADD COLUMN IF NOT EXISTS judge_group TEXT NOT NULL DEFAULT ''");
+    await run("ALTER TABLE hackathon_judges ADD COLUMN IF NOT EXISTS attended_at TEXT NOT NULL DEFAULT ''");
+    await run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS judge_group TEXT NOT NULL DEFAULT ''");
+    await run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS award_tag TEXT NOT NULL DEFAULT ''");
+    await run(`CREATE TABLE IF NOT EXISTS judging_config (
+      id SERIAL PRIMARY KEY,
+      hackathon_id INTEGER NOT NULL UNIQUE,
+      judge_time_minutes INTEGER NOT NULL DEFAULT 60,
+      per_project_minutes INTEGER NOT NULL DEFAULT 5,
+      group_count INTEGER NOT NULL DEFAULT 0,
+      assigned_at TEXT NOT NULL DEFAULT ''
+    )`);
+    return;
+  }
+  const addCol = async (table, col, type) => {
+    if (!(await tableExists(table))) return;
+    const cols = await columnNames(table);
+    if (!cols.includes(col)) await run(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+  };
+  await addCol('hackathon_judges', 'judge_group', "TEXT NOT NULL DEFAULT ''");
+  await addCol('hackathon_judges', 'attended_at', "TEXT NOT NULL DEFAULT ''");
+  await addCol('projects', 'judge_group', "TEXT NOT NULL DEFAULT ''");
+  await addCol('projects', 'award_tag', "TEXT NOT NULL DEFAULT ''");
+  if (!(await tableExists('judging_config'))) {
+    await run(`CREATE TABLE judging_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      hackathon_id INTEGER NOT NULL UNIQUE,
+      judge_time_minutes INTEGER NOT NULL DEFAULT 60,
+      per_project_minutes INTEGER NOT NULL DEFAULT 5,
+      group_count INTEGER NOT NULL DEFAULT 0,
+      assigned_at TEXT NOT NULL DEFAULT ''
+    )`);
+  }
+}
+
+// Creates the demo_slots table (already in schema for fresh DBs; migration for existing ones).
+export async function migrateDemoSlots() {
+  if (isPg) {
+    await run(`CREATE TABLE IF NOT EXISTS demo_slots (
+      id SERIAL PRIMARY KEY,
+      hackathon_id INTEGER NOT NULL,
+      project_id INTEGER,
+      custom_name TEXT NOT NULL DEFAULT '',
+      order_index INTEGER NOT NULL DEFAULT 0,
+      duration_minutes INTEGER NOT NULL DEFAULT 10,
+      status TEXT NOT NULL DEFAULT 'scheduled',
+      scheduled_start TEXT NOT NULL DEFAULT '',
+      actual_start TEXT NOT NULL DEFAULT '',
+      actual_end TEXT NOT NULL DEFAULT '',
+      break_after_minutes INTEGER NOT NULL DEFAULT 0,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT '1970-01-01'
+    )`);
+    return;
+  }
+  if (!(await tableExists('demo_slots'))) {
+    await run(`CREATE TABLE demo_slots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      hackathon_id INTEGER NOT NULL,
+      project_id INTEGER,
+      custom_name TEXT NOT NULL DEFAULT '',
+      order_index INTEGER NOT NULL DEFAULT 0,
+      duration_minutes INTEGER NOT NULL DEFAULT 10,
+      status TEXT NOT NULL DEFAULT 'scheduled',
+      scheduled_start TEXT NOT NULL DEFAULT '',
+      actual_start TEXT NOT NULL DEFAULT '',
+      actual_end TEXT NOT NULL DEFAULT '',
+      break_after_minutes INTEGER NOT NULL DEFAULT 0,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT '1970-01-01'
+    )`);
+  }
+}
+
 export async function migrateLegacy() {
   if (isPg) return; // fresh schema on Postgres; no legacy data to migrate
   if (!(await tableExists('tracks'))) return; // brand-new DB; schema.js already built it

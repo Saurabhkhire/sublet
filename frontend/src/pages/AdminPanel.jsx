@@ -12,7 +12,10 @@ export default function AdminPanel() {
       <TracksEditor hid={hid} reload={reload} />
       <SponsorsEditor hid={hid} reload={reload} />
       <JudgesSection hid={hid} />
+      <JudgeAssignmentSection hid={hid} meta={meta} />
       <SpeakersSection hid={hid} />
+      <DemoSlotsSection hid={hid} />
+      <AwardsSection hid={hid} />
       <ProjectsSection hid={hid} meta={meta} />
       <MatchingSection hid={hid} />
       <DangerZone hid={hid} name={meta.hackathon.name} />
@@ -690,6 +693,330 @@ function SpeakersSection({ hid }) {
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+// ── Judge Assignment (config + quick summary; full view on /judging-groups) ──────────────
+
+function JudgeAssignmentSection({ hid, meta }) {
+  const base = `/api/hackathons/${hid}/judging-groups`;
+  const [data, setData] = useState(null);
+  const [params, setParams] = useState({ judge_time_minutes: 60, per_project_minutes: 5 });
+  const [msg, setMsg] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    try {
+      const d = await get(base);
+      setData(d);
+      if (d.config?.judge_time_minutes) setParams({ judge_time_minutes: d.config.judge_time_minutes, per_project_minutes: d.config.per_project_minutes });
+    } catch (e) { setError(e.message); }
+  }
+  useEffect(load, [hid]);
+
+  async function saveParams(e) {
+    e.preventDefault();
+    setBusy(true); setMsg(''); setError('');
+    try {
+      await put(base + '/config', params);
+      setMsg('Saved!'); setTimeout(() => setMsg(''), 1500);
+      await load();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+
+  async function assign() {
+    if (!confirm('Assign all projects to judging groups now? Existing assignments will be overwritten.')) return;
+    setBusy(true); setMsg(''); setError('');
+    try {
+      const r = await post(base + '/assign');
+      setMsg(`Assigned ${r.projects_assigned} project(s) into ${r.group_count} group(s).`);
+      await load();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+
+  const ppg = data?.projects_per_group || 0;
+  const need = data?.group_count_needed || 0;
+  const assigned = data?.config?.assigned_at;
+  const groupKeys = data?.groups ? Object.keys(data.groups).sort() : [];
+  const total = groupKeys.reduce((a, k) => a + data.groups[k].projects.length, 0) + (data?.unassigned_projects || 0);
+
+  return (
+    <section className="card">
+      <h3 style={{ marginTop: 0, marginBottom: 4 }}>⚖️ Judge Assignment</h3>
+      <p className="muted small" style={{ marginTop: 0, marginBottom: 12 }}>
+        Configure how projects are split into judging groups. Judges mark their own attendance on the <strong>Judging Groups</strong> page.
+      </p>
+      {error && <p className="error">{error}</p>}
+      <form onSubmit={saveParams}>
+        <div className="row" style={{ gap: 16, flexWrap: 'wrap' }}>
+          <label style={{ flex: 1, minWidth: 140 }}>
+            Total judge time (min)
+            <input type="number" min={1} max={480} value={params.judge_time_minutes}
+              onChange={(e) => setParams({ ...params, judge_time_minutes: Number(e.target.value) })} />
+          </label>
+          <label style={{ flex: 1, minWidth: 140 }}>
+            Time per project (min)
+            <input type="number" min={1} max={120} value={params.per_project_minutes}
+              onChange={(e) => setParams({ ...params, per_project_minutes: Number(e.target.value) })} />
+          </label>
+        </div>
+        {ppg > 0 && (
+          <div className="muted small" style={{ padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 6, margin: '8px 0' }}>
+            → {ppg} project(s) per group · {need} group(s) needed for {total} project(s) total
+          </div>
+        )}
+        <div className="row" style={{ gap: 10, marginTop: 8 }}>
+          <button type="submit" disabled={busy}>Save params</button>
+          <button type="button" className="outline" onClick={assign} disabled={busy}>
+            {assigned ? '↺ Re-assign Groups' : '▶ Assign Groups'}
+          </button>
+          {msg && <span className="success small">{msg}</span>}
+        </div>
+      </form>
+      {assigned && (
+        <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--surface-2)', borderRadius: 6 }}>
+          <span style={{ color: 'var(--green,#16a34a)', fontSize: 13 }}>✓ Groups assigned</span>
+          <span className="muted small"> · {groupKeys.length} group(s) · {data?.all_judges?.filter((j) => j.judge_group).length || 0} judge(s) checked in</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── Demo Slots (admin CRUD for demo day schedule) ─────────────────────────────
+
+function DemoSlotsSection({ hid }) {
+  const base = `/api/hackathons/${hid}/demo-slots`;
+  const [slots, setSlots] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const EMPTY = { projectId: '', customName: '', duration: '10', breakAfter: '' };
+  const [add, setAdd] = useState(EMPTY);
+  const [editing, setEditing] = useState(null);
+
+  async function load() {
+    try { setSlots(await get(base)); } catch (e) { setError(e.message); }
+  }
+  async function loadProjects() {
+    try { setProjects(await get(`/api/hackathons/${hid}/projects`)); } catch (_) {}
+  }
+  useEffect(() => { load(); loadProjects(); }, [hid]);
+
+  async function addSlot(e) {
+    e.preventDefault();
+    if (!add.projectId && !add.customName.trim()) return;
+    setBusy(true); setError('');
+    try {
+      await post(base, {
+        project_id: add.projectId ? Number(add.projectId) : null,
+        custom_name: add.customName.trim(),
+        duration_minutes: Math.max(1, Number(add.duration) || 10),
+        break_after_minutes: Math.max(0, Number(add.breakAfter) || 0),
+      });
+      setAdd(EMPTY); await load();
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    try {
+      await put(`${base}/${editing.id}`, {
+        project_id: editing.projectId ? Number(editing.projectId) : null,
+        custom_name: editing.customName || '',
+        duration_minutes: Math.max(1, Number(editing.duration) || 10),
+        break_after_minutes: Math.max(0, Number(editing.breakAfter) || 0),
+      });
+      setEditing(null); await load();
+    } catch (err) { setError(err.message); }
+  }
+
+  async function deleteSlot(id) {
+    try { await del(`${base}/${id}`); await load(); } catch (err) { setError(err.message); }
+  }
+
+  async function move(idx, dir) {
+    const to = idx + dir;
+    if (to < 0 || to >= slots.length) return;
+    const list = [...slots];
+    [list[idx], list[to]] = [list[to], list[idx]];
+    setSlots(list);
+    await put(`${base}/reorder`, list.map((s, i) => ({ id: s.id, order_index: i })));
+  }
+
+  async function resetAll() {
+    if (!confirm('Reset all demo slot statuses? This clears live event progress.')) return;
+    for (const s of slots) {
+      if (s.status !== 'scheduled') await put(`${base}/${s.id}`, { status: 'scheduled', actual_start: '', actual_end: '' });
+    }
+    await load();
+  }
+
+  const statusColor = (s) => s === 'speaking' ? 'var(--accent)' : s === 'completed' ? 'var(--green,#16a34a)' : s === 'skipped' ? '#6b7280' : 'transparent';
+
+  return (
+    <section className="card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <h3 style={{ marginTop: 0, marginBottom: 0 }}>🎬 Demo Day Schedule</h3>
+        {slots.some((s) => s.status !== 'scheduled') && (
+          <button style={spBtn} onClick={resetAll}>↺ Reset all</button>
+        )}
+      </div>
+      <p className="muted small" style={{ marginTop: 4, marginBottom: 12 }}>
+        Add finalist projects to the demo schedule. Open <strong>Demo Day</strong> tab to run the live event.
+      </p>
+      {error && <p className="error">{error}</p>}
+
+      {/* Column headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 55px 65px auto', gap: 6, padding: '4px 10px', marginBottom: 2 }}>
+        {['Project / Name', 'Custom label', 'Min', 'Break ☕', ''].map((h) => (
+          <div key={h} className="faint" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.07em' }}>{h}</div>
+        ))}
+      </div>
+
+      {/* Add row */}
+      <form onSubmit={addSlot} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 55px 65px auto', gap: 6, marginBottom: 12, alignItems: 'center' }}>
+        <select value={add.projectId} onChange={(e) => setAdd({ ...add, projectId: e.target.value })} style={{ fontSize: 13, padding: '5px 6px' }}>
+          <option value="">— Custom slot —</option>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <input placeholder="Opening, Awards…" value={add.customName} onChange={(e) => setAdd({ ...add, customName: e.target.value })} style={{ fontSize: 13 }} />
+        <input type="number" min={1} max={120} value={add.duration} onChange={(e) => setAdd({ ...add, duration: e.target.value })} style={{ fontSize: 13, padding: '5px 4px' }} />
+        <input type="number" min={0} max={60} placeholder="0" value={add.breakAfter} onChange={(e) => setAdd({ ...add, breakAfter: e.target.value })} style={{ fontSize: 13, padding: '5px 4px' }} />
+        <button type="submit" style={spBtn} disabled={busy || (!add.projectId && !add.customName.trim())}>+ Add</button>
+      </form>
+
+      {slots.length === 0 && <p className="faint small">No demo slots yet.</p>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {slots.map((s, idx) => {
+          const isEdit = editing?.id === s.id;
+          const name = s.custom_name || s.project_name || 'Demo';
+          return (
+            <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 1fr 55px 65px auto', gap: 6, alignItems: 'center', padding: '7px 10px', borderRadius: 6, border: '1.5px solid var(--border)', background: 'var(--surface-2)' }}>
+              <span style={{ color: 'var(--muted)', fontSize: 13, userSelect: 'none' }}>⠿</span>
+              {isEdit ? (
+                <>
+                  <select value={editing.projectId || ''} onChange={(e) => setEditing({ ...editing, projectId: e.target.value })} style={{ fontSize: 12, padding: '3px 4px' }}>
+                    <option value="">— Custom —</option>
+                    {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  <input value={editing.customName} onChange={(e) => setEditing({ ...editing, customName: e.target.value })} style={{ fontSize: 12, padding: '3px 6px' }} placeholder="Label" />
+                  <input type="number" min={1} max={120} value={editing.duration} onChange={(e) => setEditing({ ...editing, duration: e.target.value })} style={{ fontSize: 12, padding: '3px 4px' }} />
+                  <input type="number" min={0} max={60} value={editing.breakAfter} onChange={(e) => setEditing({ ...editing, breakAfter: e.target.value })} style={{ fontSize: 12, padding: '3px 4px' }} />
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button style={spBtn} onClick={saveEdit}>Save</button>
+                    <button style={spBtnGry} onClick={() => setEditing(null)}>✕</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {name}
+                    {s.project_award && <span style={{ marginLeft: 6, fontSize: 11, padding: '1px 5px', borderRadius: 4, background: 'var(--accent)', color: '#fff' }}>{s.project_award}</span>}
+                  </div>
+                  <div className="small muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.team?.join(', ') || (s.custom_name && s.project_name ? s.project_name : '—')}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    {s.duration_minutes} min
+                    {s.status !== 'scheduled' && (
+                      <div style={{ fontSize: 11, color: statusColor(s.status), fontWeight: 600, marginTop: 1 }}>
+                        {s.status.charAt(0).toUpperCase() + s.status.slice(1)}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    {s.break_after_minutes > 0 ? `${s.break_after_minutes} min` : <span style={{ opacity: 0.35 }}>—</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 3 }}>
+                    <button style={spBtnGry} onClick={() => move(idx, -1)} disabled={idx === 0}>↑</button>
+                    <button style={spBtnGry} onClick={() => move(idx, 1)} disabled={idx === slots.length - 1}>↓</button>
+                    <button style={spBtnSm} onClick={() => setEditing({ id: s.id, projectId: s.project_id ? String(s.project_id) : '', customName: s.custom_name || '', duration: String(s.duration_minutes), breakAfter: String(s.break_after_minutes || 0) })}>✏</button>
+                    <button style={spBtnRed} onClick={() => deleteSlot(s.id)}>✕</button>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// ── Awards Section (mark projects with award tags) ────────────────────────────
+
+function AwardsSection({ hid }) {
+  const [projects, setProjects] = useState([]);
+  const [tags, setTags] = useState({});
+  const [msg, setMsg] = useState({});
+  const [error, setError] = useState('');
+
+  async function load() {
+    try {
+      const all = await get(`/api/hackathons/${hid}/projects`);
+      setProjects(all);
+      const t = {};
+      for (const p of all) t[p.id] = p.award_tag || '';
+      setTags(t);
+    } catch (e) { setError(e.message); }
+  }
+  useEffect(load, [hid]);
+
+  async function saveTag(pid) {
+    try {
+      await put(`/api/hackathons/${hid}/projects/${pid}/award`, { award_tag: tags[pid] || '' });
+      setMsg((m) => ({ ...m, [pid]: '✓' }));
+      setTimeout(() => setMsg((m) => ({ ...m, [pid]: '' })), 1500);
+    } catch (e) { setError(e.message); }
+  }
+
+  const PRESETS = ['Finalist', '1st Place', '2nd Place', '3rd Place'];
+
+  return (
+    <section className="card">
+      <h3 style={{ marginTop: 0, marginBottom: 4 }}>🏆 Awards</h3>
+      <p className="muted small" style={{ marginTop: 0, marginBottom: 12 }}>
+        Tag projects with award labels. These appear on the <strong>Winners</strong> page and in the demo schedule.
+      </p>
+      {error && <p className="error">{error}</p>}
+      {projects.length === 0 && <p className="faint small">No projects submitted yet.</p>}
+      <div className="stack" style={{ gap: 6 }}>
+        {projects.map((p) => (
+          <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr 200px 80px auto', gap: 8, alignItems: 'center', padding: '8px 12px', background: 'var(--surface-2)', borderRadius: 6 }}>
+            <div>
+              <div style={{ fontWeight: 500, fontSize: 13 }}>{p.name}</div>
+              {p.participants?.length > 0 && <div className="small muted">{p.participants.map((u) => u.email).join(', ')}</div>}
+            </div>
+            <input
+              value={tags[p.id] || ''}
+              onChange={(e) => setTags((t) => ({ ...t, [p.id]: e.target.value }))}
+              placeholder="e.g. 1st Place, Finalist…"
+              list={`presets-${p.id}`}
+              style={{ fontSize: 13, padding: '5px 8px' }}
+            />
+            <datalist id={`presets-${p.id}`}>
+              {PRESETS.map((pr) => <option key={pr} value={pr} />)}
+            </datalist>
+            <button style={spBtn} onClick={() => saveTag(p.id)}>
+              {msg[p.id] || 'Save'}
+            </button>
+            {tags[p.id] && (
+              <button style={spBtnRed} title="Clear award" onClick={async () => {
+                setTags((t) => ({ ...t, [p.id]: '' }));
+                try {
+                  await put(`/api/hackathons/${hid}/projects/${p.id}/award`, { award_tag: '' });
+                  setMsg((m) => ({ ...m, [p.id]: '✓' }));
+                  setTimeout(() => setMsg((m) => ({ ...m, [p.id]: '' })), 1500);
+                } catch (e) { setError(e.message); }
+              }}>✕</button>
+            )}
+          </div>
+        ))}
       </div>
     </section>
   );

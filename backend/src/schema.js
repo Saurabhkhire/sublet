@@ -123,6 +123,33 @@ export async function createSchema() {
       created_at TEXT NOT NULL DEFAULT '1970-01-01'
     );
 
+    -- Judging group assignment config
+    CREATE TABLE IF NOT EXISTS judging_config (
+      id ${PK},
+      hackathon_id INTEGER NOT NULL UNIQUE,
+      judge_time_minutes INTEGER NOT NULL DEFAULT 60,
+      per_project_minutes INTEGER NOT NULL DEFAULT 5,
+      group_count INTEGER NOT NULL DEFAULT 0,
+      assigned_at TEXT NOT NULL DEFAULT ''
+    );
+
+    -- Demo day slot schedule (like speakers but for projects)
+    CREATE TABLE IF NOT EXISTS demo_slots (
+      id ${PK},
+      hackathon_id INTEGER NOT NULL,
+      project_id INTEGER,
+      custom_name TEXT NOT NULL DEFAULT '',
+      order_index INTEGER NOT NULL DEFAULT 0,
+      duration_minutes INTEGER NOT NULL DEFAULT 10,
+      status TEXT NOT NULL DEFAULT 'scheduled',
+      scheduled_start TEXT NOT NULL DEFAULT '',
+      actual_start TEXT NOT NULL DEFAULT '',
+      actual_end TEXT NOT NULL DEFAULT '',
+      break_after_minutes INTEGER NOT NULL DEFAULT 0,
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT '1970-01-01'
+    );
+
     CREATE TABLE IF NOT EXISTS scores (
       id ${PK},
       project_id INTEGER NOT NULL,

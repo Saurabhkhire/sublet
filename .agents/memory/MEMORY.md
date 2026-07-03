@@ -1,0 +1,1 @@
+- [Postgres SQL dialect](pg-dialect.md) — GROUP_CONCAT is SQLite-only; in cross-dialect queries use separate JS loops instead of aggregate functions.

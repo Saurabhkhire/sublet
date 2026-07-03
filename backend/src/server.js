@@ -10,6 +10,8 @@ import hackathonRoutes from './routes/hackathons.js';
 import matchingRoutes from './routes/matching.js';
 import projectRoutes from './routes/projects.js';
 import speakerRoutes from './routes/speakers.js';
+import judgingGroupRoutes from './routes/judging-groups.js';
+import demoSlotRoutes from './routes/demo-slots.js';
 import metaRoutes from './routes/meta.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +31,8 @@ export async function createApp() {
   app.use('/api/hackathons/:hid/matching', matchingRoutes);
   app.use('/api/hackathons/:hid/projects', projectRoutes);
   app.use('/api/hackathons/:hid/speakers', speakerRoutes);
+  app.use('/api/hackathons/:hid/judging-groups', judgingGroupRoutes);
+  app.use('/api/hackathons/:hid/demo-slots', demoSlotRoutes);
 
   app.use((err, _req, res, _next) => {
     console.error('[error]', err);
