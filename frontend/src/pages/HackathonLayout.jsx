@@ -27,6 +27,7 @@ export default function HackathonLayout() {
     { to: `/h/${hid}`, label: 'Overview', icon: '◆', end: true },
     { to: `/h/${hid}/matching`, label: 'Team Matching', icon: '⚇' },
     { to: `/h/${hid}/submit`, label: 'Submit Project', icon: '➜' },
+    { to: `/h/${hid}/schedule`, label: 'Schedule', icon: '🎤' },
     ...(meta.is_judge ? [{ to: `/h/${hid}/judging`, label: 'Judging', icon: '★' }] : []),
     ...(meta.is_admin ? [{ to: `/h/${hid}/admin`, label: 'Admin', icon: '⚙' }] : []),
   ];

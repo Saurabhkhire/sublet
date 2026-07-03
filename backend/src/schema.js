@@ -106,6 +106,21 @@ export async function createSchema() {
       sponsor_id INTEGER NOT NULL
     );
 
+    -- Speaker schedule, ordered by order_index. Status: scheduled/speaking/completed/missed/skipped.
+    CREATE TABLE IF NOT EXISTS speakers (
+      id ${PK},
+      hackathon_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      duration_minutes INTEGER NOT NULL DEFAULT 15,
+      order_index INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'scheduled',
+      scheduled_start TEXT NOT NULL DEFAULT '',
+      actual_start TEXT NOT NULL DEFAULT '',
+      actual_end TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT '1970-01-01'
+    );
+
     CREATE TABLE IF NOT EXISTS scores (
       id ${PK},
       project_id INTEGER NOT NULL,

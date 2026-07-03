@@ -12,6 +12,7 @@ export default function AdminPanel() {
       <TracksEditor hid={hid} reload={reload} />
       <SponsorsEditor hid={hid} reload={reload} />
       <JudgesSection hid={hid} />
+      <SpeakersSection hid={hid} />
       <ProjectsSection hid={hid} meta={meta} />
       <MatchingSection hid={hid} />
       <DangerZone hid={hid} name={meta.hackathon.name} />
@@ -454,6 +455,212 @@ function MatchingSection({ hid }) {
           </div>
         </>
       )}
+    </section>
+  );
+}
+
+function SpeakersSection({ hid }) {
+  const base = `/api/hackathons/${hid}/speakers`;
+  const [speakers, setSpeakers] = useState([]);
+  const [error, setError] = useState('');
+  // add form
+  const [addName, setAddName] = useState('');
+  const [addTitle, setAddTitle] = useState('');
+  const [addDuration, setAddDuration] = useState('15');
+  const [addBusy, setAddBusy] = useState(false);
+  // inline edit
+  const [editing, setEditing] = useState(null); // { id, name, title, duration_minutes }
+  // drag
+  const [dragSrc, setDragSrc] = useState(null);
+  const [dragOver, setDragOver] = useState(null);
+
+  async function load() {
+    try { setSpeakers(await get(base)); } catch (e) { setError(e.message); }
+  }
+  useEffect(() => { load(); }, [hid]);
+
+  async function addSpeaker(e) {
+    e.preventDefault();
+    if (!addName.trim()) return;
+    setAddBusy(true); setError('');
+    try {
+      await post(base, { name: addName.trim(), title: addTitle.trim(), duration_minutes: Number(addDuration) || 15 });
+      setAddName(''); setAddTitle(''); setAddDuration('15');
+      await load();
+    } catch (err) { setError(err.message); } finally { setAddBusy(false); }
+  }
+
+  async function saveEdit(sp) {
+    try {
+      await put(`${base}/${sp.id}`, { name: sp.name, title: sp.title, duration_minutes: Number(sp.duration_minutes) || 15 });
+      setEditing(null);
+      await load();
+    } catch (err) { setError(err.message); }
+  }
+
+  async function deleteSpeaker(id) {
+    if (!confirm('Remove this speaker?')) return;
+    try { await del(`${base}/${id}`); await load(); } catch (err) { setError(err.message); }
+  }
+
+  async function move(idx, dir) {
+    const to = idx + dir;
+    if (to < 0 || to >= speakers.length) return;
+    const list = [...speakers];
+    [list[idx], list[to]] = [list[to], list[idx]];
+    const patch = list.map((s, i) => ({ id: s.id, order_index: i }));
+    setSpeakers(list);
+    await put(`${base}/reorder`, patch);
+  }
+
+  async function commitDrag(from, to) {
+    if (from === to) return;
+    const list = [...speakers];
+    const [moved] = list.splice(from, 1);
+    list.splice(to, 0, moved);
+    const patch = list.map((s, i) => ({ id: s.id, order_index: i }));
+    setSpeakers(list);
+    await put(`${base}/reorder`, patch);
+  }
+
+  async function resetAllScheduled() {
+    if (!confirm('Reset all speaker statuses back to "Scheduled"? This clears live event progress.')) return;
+    try {
+      for (const sp of speakers) {
+        if (sp.status !== 'scheduled') {
+          await put(`${base}/${sp.id}`, { status: 'scheduled', actual_start: '', actual_end: '' });
+        }
+      }
+      await load();
+    } catch (err) { setError(err.message); }
+  }
+
+  return (
+    <section className="card">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <h3 style={{ marginTop: 0, marginBottom: 0 }}>🎤 Speaker Schedule</h3>
+        {speakers.some((s) => s.status !== 'scheduled') && (
+          <button className="btn-outline" style={{ fontSize: 12, padding: '3px 10px' }} onClick={resetAllScheduled}>
+            Reset all to Scheduled
+          </button>
+        )}
+      </div>
+      <p className="muted small" style={{ marginTop: 4 }}>
+        Add speakers and set their talk durations. Drag rows or use the arrows to reorder. Go to <strong>Schedule</strong> to run the live event.
+      </p>
+      {error && <p className="error">{error}</p>}
+
+      {/* Add form */}
+      <form onSubmit={addSpeaker} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        <input
+          placeholder="Speaker name *"
+          value={addName}
+          onChange={(e) => setAddName(e.target.value)}
+          style={{ flex: '2 1 140px' }}
+          required
+        />
+        <input
+          placeholder="Talk title"
+          value={addTitle}
+          onChange={(e) => setAddTitle(e.target.value)}
+          style={{ flex: '3 1 180px' }}
+        />
+        <input
+          type="number" min={1} max={300}
+          placeholder="Min"
+          value={addDuration}
+          onChange={(e) => setAddDuration(e.target.value)}
+          style={{ width: 70 }}
+        />
+        <button type="submit" disabled={addBusy || !addName.trim()}>
+          {addBusy ? 'Adding…' : '+ Add Speaker'}
+        </button>
+      </form>
+
+      {/* Speaker list */}
+      {speakers.length === 0 && (
+        <p className="faint small">No speakers yet. Add one above.</p>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {speakers.map((sp, idx) => {
+          const isEdit = editing?.id === sp.id;
+          const isDragging = dragSrc === idx;
+          const isDropTarget = dragOver === idx && dragSrc !== null && dragSrc !== idx;
+          const statusColor = sp.status === 'speaking' ? 'var(--accent)'
+            : sp.status === 'completed' ? 'var(--green,#16a34a)'
+            : sp.status === 'missed' ? '#d97706'
+            : sp.status === 'skipped' ? 'var(--muted)'
+            : 'transparent';
+
+          return (
+            <div
+              key={sp.id}
+              draggable={!isEdit}
+              onDragStart={() => setDragSrc(idx)}
+              onDragEnd={() => { setDragSrc(null); setDragOver(null); }}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(idx); }}
+              onDragLeave={() => setDragOver(null)}
+              onDrop={() => { commitDrag(dragSrc, idx); setDragSrc(null); setDragOver(null); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 10px', borderRadius: 6,
+                border: isDropTarget ? '1.5px dashed var(--accent)' : '1.5px solid var(--border)',
+                background: 'var(--surface-2)',
+                opacity: isDragging ? 0.4 : 1,
+                cursor: isEdit ? 'default' : 'grab',
+              }}
+            >
+              {/* Drag handle */}
+              <span style={{ color: 'var(--muted)', fontSize: 14, flexShrink: 0, cursor: 'grab' }}>⠿</span>
+
+              {isEdit ? (
+                <>
+                  <input
+                    value={editing.name}
+                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                    style={{ flex: '2 1 120px', padding: '3px 7px', fontSize: 13 }}
+                    placeholder="Name"
+                  />
+                  <input
+                    value={editing.title}
+                    onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+                    style={{ flex: '3 1 160px', padding: '3px 7px', fontSize: 13 }}
+                    placeholder="Talk title"
+                  />
+                  <input
+                    type="number" min={1} max={300}
+                    value={editing.duration_minutes}
+                    onChange={(e) => setEditing({ ...editing, duration_minutes: e.target.value })}
+                    style={{ width: 58, padding: '3px 6px', fontSize: 13 }}
+                  />
+                  <span className="faint small" style={{ flexShrink: 0 }}>min</span>
+                  <button style={{ padding: '3px 10px', fontSize: 13 }} onClick={() => saveEdit(editing)}>Save</button>
+                  <button className="btn-outline" style={{ padding: '3px 8px', fontSize: 13 }} onClick={() => setEditing(null)}>✕</button>
+                </>
+              ) : (
+                <>
+                  <div style={{ flex: '2 1 120px', minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sp.name}</div>
+                    {sp.title && <div className="faint small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sp.title}</div>}
+                  </div>
+                  <div className="small muted" style={{ flexShrink: 0 }}>{sp.duration_minutes} min</div>
+                  {sp.status !== 'scheduled' && (
+                    <span style={{ fontSize: 12, color: statusColor, flexShrink: 0, fontWeight: 600 }}>
+                      {sp.status.charAt(0).toUpperCase() + sp.status.slice(1)}
+                    </span>
+                  )}
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 'auto' }}>
+                    <button className="btn-outline" style={{ padding: '2px 6px', fontSize: 12 }} title="Move up" onClick={() => move(idx, -1)} disabled={idx === 0}>↑</button>
+                    <button className="btn-outline" style={{ padding: '2px 6px', fontSize: 12 }} title="Move down" onClick={() => move(idx, 1)} disabled={idx === speakers.length - 1}>↓</button>
+                    <button className="btn-outline" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setEditing({ id: sp.id, name: sp.name, title: sp.title, duration_minutes: sp.duration_minutes })}>✏</button>
+                    <button className="danger outline" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => deleteSpeaker(sp.id)}>✕</button>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }
