@@ -107,8 +107,12 @@ export default function Schedule() {
   const [isLive, setIsLive]         = useState(false);
   const [isPaused, setIsPaused]     = useState(false);
   const [currentId, setCurrentId]   = useState(null);
+  const [pendingId, setPendingId]   = useState(null); // on-deck: advanced but timer not started yet
   const [elapsed, setElapsed]       = useState(0);
-  const [liveStartedAt, setLiveStartedAt] = useState(null); // real clock time when Start was pressed
+  const [liveStartedAt, setLiveStartedAt] = useState(null);
+  const [autoStart, setAutoStart]   = useState(() => {
+    try { return localStorage.getItem('schedAutoStart') !== 'false'; } catch { return true; }
+  });
 
   const timerRef    = useRef(null);
   const alerted2    = useRef(false);
@@ -129,8 +133,15 @@ export default function Schedule() {
   const remaining    = speakers.filter((s) => isEligible(s)).length;
   const total        = speakers.length;
 
-  const prevSpeaker = speakers.slice(0, currentIdx).filter((s) => s.status === 'completed').slice(-1)[0] || null;
-  const nextSpeaker = speakers.find((s, i) => i > currentIdx && isEligible(s)) || null;
+  const pendingSpeaker = speakers.find((s) => s.id === pendingId) || null;
+  const pendingIdx     = pendingSpeaker ? speakers.indexOf(pendingSpeaker) : -1;
+  const prevSpeaker    = speakers.slice(0, currentIdx).filter((s) => s.status === 'completed').slice(-1)[0] || null;
+  // "Up next" looks after the active speaker, or after the on-deck speaker if between slots
+  const nextSpeaker = current
+    ? speakers.find((s, i) => i > currentIdx && isEligible(s)) || null
+    : pendingSpeaker
+      ? speakers.find((s, i) => i > pendingIdx && isEligible(s)) || null
+      : null;
 
   // When live, anchor all times to the actual clock time Start was pressed.
   // When not live, use the hackathon's configured start_time (tentative).
@@ -192,9 +203,9 @@ export default function Schedule() {
 
   async function stopEvent() {
     stopTimer();
-    // If there's a current speaker mid-talk, leave their status as-is (don't mark them done)
     setIsLive(false);
     setCurrentId(null);
+    setPendingId(null);
     setLiveStartedAt(null);
   }
 
@@ -203,6 +214,7 @@ export default function Schedule() {
     stopTimer();
     setIsLive(false);
     setCurrentId(null);
+    setPendingId(null);
     setElapsed(0);
     setLiveStartedAt(null);
     for (const sp of speakers) {
@@ -228,17 +240,22 @@ export default function Schedule() {
       actual_end: new Date().toISOString(),
     });
     setSpeakers((prev) => prev.map((s) => s.id === current.id ? { ...s, status } : s));
-    const nextIdx = speakers.findIndex((s, i) => i > currentIdx && isEligible(s));
-    if (nextIdx >= 0) {
-      await activateSpeaker(speakers, speakers[nextIdx].id);
+    const nextSp = speakers.find((s, i) => i > currentIdx && isEligible(s));
+    if (nextSp) {
+      if (autoStart) {
+        await activateSpeaker(speakers, nextSp.id);
+      } else {
+        setCurrentId(null);
+        setPendingId(nextSp.id);
+      }
     } else {
       setIsLive(false);
       setCurrentId(null);
+      setPendingId(null);
     }
   }
 
   async function missSpeaker() {
-    // Mark as 'rescheduled' and move to end — they get another turn when the queue reaches them
     stopTimer();
     if (!current) return;
     const maxOrder = speakers.reduce((m, s) => Math.max(m, s.order_index), 0);
@@ -251,10 +268,51 @@ export default function Schedule() {
     setSpeakers(fresh);
     const nextSp = fresh.find((s, i) => i >= currentIdx && isEligible(s) && s.id !== current.id);
     if (nextSp) {
-      await activateSpeaker(fresh, nextSp.id);
+      if (autoStart) {
+        await activateSpeaker(fresh, nextSp.id);
+      } else {
+        setCurrentId(null);
+        setPendingId(nextSp.id);
+      }
     } else {
       setIsLive(false);
       setCurrentId(null);
+      setPendingId(null);
+    }
+  }
+
+  // Start the on-deck speaker's timer explicitly
+  async function startPending() {
+    if (!pendingId) return;
+    const id = pendingId;
+    setPendingId(null);
+    await activateSpeaker(speakers, id);
+  }
+
+  // Miss or skip the on-deck speaker (before their timer starts)
+  async function dismissPending(status) {
+    if (!pendingId) return;
+    const sp = speakers.find((s) => s.id === pendingId);
+    if (!sp) return;
+    const spIdx = speakers.indexOf(sp);
+    if (status === 'rescheduled') {
+      const maxOrder = speakers.reduce((m, s) => Math.max(m, s.order_index), 0);
+      await put(`/api/hackathons/${hid}/speakers/${sp.id}`, { status: 'rescheduled', order_index: maxOrder + 1 });
+      const fresh = await get(`/api/hackathons/${hid}/speakers`);
+      setSpeakers(fresh);
+      const nextSp = fresh.find((s, i) => i >= spIdx && isEligible(s) && s.id !== sp.id);
+      if (nextSp) {
+        if (autoStart) { setPendingId(null); await activateSpeaker(fresh, nextSp.id); }
+        else setPendingId(nextSp.id);
+      } else { setIsLive(false); setPendingId(null); }
+    } else {
+      await put(`/api/hackathons/${hid}/speakers/${sp.id}`, { status });
+      setSpeakers((prev) => prev.map((s) => s.id === sp.id ? { ...s, status } : s));
+      const nextSp = speakers.find((s, i) => i > spIdx && isEligible(s));
+      if (nextSp) {
+        if (autoStart) { setPendingId(null); await activateSpeaker(speakers, nextSp.id); }
+        else setPendingId(nextSp.id);
+      } else { setIsLive(false); setPendingId(null); }
     }
   }
 
@@ -287,6 +345,15 @@ export default function Schedule() {
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 20, background: '#dc2626', color: '#fff', fontWeight: 700, fontSize: 13 }}>
               ● LIVE
             </span>
+          )}
+          {isAdmin && isLive && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+              <input type="checkbox" checked={autoStart} onChange={() => {
+                const n = !autoStart; setAutoStart(n);
+                try { localStorage.setItem('schedAutoStart', String(n)); } catch {}
+              }} />
+              Auto-start next
+            </label>
           )}
           {canStart    && <button style={B} onClick={startEvent}>▶ Start Event</button>}
           {canRestart  && <button style={B_GRY} onClick={restartEvent}>↺ Run Again</button>}
@@ -321,6 +388,14 @@ export default function Schedule() {
                 </div>
               </div>
             )}
+            {pendingSpeaker && !current && (
+              <div>
+                <div className="faint" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.07em', color: '#d97706' }}>On deck</div>
+                <div style={{ fontWeight: 700, color: '#d97706' }}>{pendingSpeaker.name}
+                  {pendingSpeaker.title && <span style={{ fontWeight: 400, color: 'var(--muted)' }}> · {pendingSpeaker.title}</span>}
+                </div>
+              </div>
+            )}
             {nextSpeaker && (
               <div>
                 <div className="faint" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.07em' }}>Up next</div>
@@ -336,6 +411,31 @@ export default function Schedule() {
           </div>
         )}
       </div>
+
+      {/* ── On-deck card (between speakers, autoStart off) ── */}
+      {isLive && pendingSpeaker && !current && isAdmin && (
+        <div className="card" style={{ textAlign: 'center', padding: '28px 24px', borderColor: '#d97706' }}>
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.1em', color: '#d97706', marginBottom: 6 }}>
+            ⏸ On Deck — ready to start
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 2 }}>{pendingSpeaker.name}</div>
+          {pendingSpeaker.title && <div className="muted small" style={{ marginBottom: 2 }}>{pendingSpeaker.title}</div>}
+          {pendingSpeaker.notes && <div className="faint small" style={{ marginBottom: 0 }}>{pendingSpeaker.notes}</div>}
+          <div className="faint small" style={{ marginBottom: 20, marginTop: 4 }}>{pendingSpeaker.duration_minutes} min slot</div>
+
+          <button style={{ ...B, fontSize: 16, padding: '10px 28px', marginBottom: 12 }} onClick={startPending}>
+            ▶ Start — {pendingSpeaker.name}
+          </button>
+
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <button style={B_AMB_SM} onClick={() => dismissPending('rescheduled')}>↩ Miss — Reschedule to Later</button>
+            <button style={B_GRY_SM} onClick={() => dismissPending('skipped')}>⏭ Skip Permanently</button>
+          </div>
+          <div className="faint" style={{ fontSize: 11, marginTop: 8 }}>
+            Miss = gets another slot at end · Skip = removed from today's run
+          </div>
+        </div>
+      )}
 
       {/* ── Live timer + controls ── */}
       {isLive && current && (
@@ -364,8 +464,9 @@ export default function Schedule() {
               ? <button style={B} onClick={resume}>▶ Resume</button>
               : <button style={B} onClick={pause}>⏸ Pause</button>
             }
-            <button style={B} onClick={() => finishAndAdvance('completed')}>✅ End Early</button>
-            <button style={B} onClick={() => finishAndAdvance('completed')}>⏭ Next Speaker</button>
+            <button style={B} onClick={() => finishAndAdvance('completed')}>
+              {autoStart ? '⏭ Done & Start Next' : '⏭ Done — Queue Next'}
+            </button>
           </div>
 
           {/* Add time */}
@@ -395,8 +496,8 @@ export default function Schedule() {
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
           <h3 style={{ margin: 0 }}>Schedule</h3>
-          {isAdmin && !isLive && speakers.length > 1 && (
-            <span className="faint small">Drag rows to reorder</span>
+          {isAdmin && speakers.length > 1 && (
+            <span className="faint small">Drag rows to reorder{isLive ? ' (swap order live)' : ''}</span>
           )}
         </div>
         <p className="faint small" style={{ marginTop: 0, marginBottom: 12 }}>
@@ -412,13 +513,14 @@ export default function Schedule() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {speakers.map((sp, idx) => {
             const isCurrent  = sp.id === currentId;
+            const isPending  = sp.id === pendingId;
             const isDragging = dragSrc === idx;
             const isDropTarget = dragOver === idx && dragSrc !== null && dragSrc !== idx;
             const st = STATUS[sp.status] || STATUS.scheduled;
             return (
               <Fragment key={sp.id}>
                 <div
-                  draggable={isAdmin && !isLive}
+                  draggable={isAdmin}
                   onDragStart={() => setDragSrc(idx)}
                   onDragEnd={() => { setDragSrc(null); setDragOver(null); }}
                   onDragOver={(e) => { e.preventDefault(); setDragOver(idx); }}
@@ -427,12 +529,13 @@ export default function Schedule() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12,
                     padding: '10px 12px', borderRadius: 7,
-                    border: isCurrent     ? '1.5px solid var(--accent)'
-                          : isDropTarget  ? '1.5px dashed var(--accent)'
-                          :                 '1.5px solid transparent',
-                    background: isCurrent ? 'var(--surface-2)' : 'transparent',
+                    border: isCurrent    ? '1.5px solid var(--accent)'
+                          : isPending   ? '1.5px solid #d97706'
+                          : isDropTarget ? '1.5px dashed var(--accent)'
+                          :               '1.5px solid transparent',
+                    background: isCurrent ? 'var(--surface-2)' : isPending ? 'rgba(217,119,6,0.06)' : 'transparent',
                     opacity: (sp.status === 'skipped' || isDragging) ? 0.4 : 1,
-                    cursor: isAdmin && !isLive ? 'grab' : 'default',
+                    cursor: isAdmin ? 'grab' : 'default',
                     transition: 'background 0.15s',
                   }}
                 >
