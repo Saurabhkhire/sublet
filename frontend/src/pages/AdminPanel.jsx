@@ -584,14 +584,14 @@ function SpeakersSection({ hid }) {
       {error && <p className="error">{error}</p>}
 
       {/* ── Column headers ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 1fr 60px auto', gap: 6, padding: '4px 10px', marginBottom: 2 }}>
-        {['Time', 'Segment / Topic', 'Speaker', 'What happens', 'Min', ''].map((h) => (
+      <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 1fr 1fr 60px auto', gap: 6, padding: '4px 10px', marginBottom: 2 }}>
+        {['Start → End (tentative)', 'Segment / Topic', 'Speaker', 'What happens', 'Min', ''].map((h) => (
           <div key={h} className="faint" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.07em' }}>{h}</div>
         ))}
       </div>
 
       {/* ── Add row ── */}
-      <form onSubmit={addSpeaker} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 1fr 60px auto', gap: 6, marginBottom: 12, alignItems: 'center' }}>
+      <form onSubmit={addSpeaker} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 1fr 1fr 60px auto', gap: 6, marginBottom: 12, alignItems: 'center' }}>
         <input type="time" value={add.time}     onChange={(e) => setAdd({ ...add, time: e.target.value })}     style={{ fontSize: 13, padding: '5px 6px' }} />
         <input placeholder="Opening remarks…"   value={add.segment}  onChange={(e) => setAdd({ ...add, segment: e.target.value })}  style={{ fontSize: 13 }} />
         <input placeholder="Alice Smith"        value={add.speaker}  onChange={(e) => setAdd({ ...add, speaker: e.target.value })}  style={{ fontSize: 13 }} />
@@ -622,7 +622,7 @@ function SpeakersSection({ hid }) {
               onDrop={() => { commitDrag(dragSrc, idx); setDragSrc(null); setDragOver(null); }}
               style={{
                 display: 'grid',
-                gridTemplateColumns: isEdit ? '24px 80px 1fr 1fr 1fr 60px auto' : '24px 80px 1fr 1fr 1fr 60px auto',
+                gridTemplateColumns: '24px 110px 1fr 1fr 1fr 60px auto',
                 gap: 6, alignItems: 'center',
                 padding: '7px 10px', borderRadius: 6,
                 border: isDropTarget ? '1.5px dashed var(--accent)' : '1.5px solid var(--border)',
@@ -648,9 +648,23 @@ function SpeakersSection({ hid }) {
                 </>
               ) : (
                 <>
-                  {/* Time */}
-                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    {sp.scheduled_start ? sp.scheduled_start : '—'}
+                  {/* Start → End */}
+                  <div>
+                    {sp.scheduled_start ? (
+                      <>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{sp.scheduled_start}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7 }}>
+                          {'→ ' + (() => {
+                            const [h, m] = sp.scheduled_start.split(':').map(Number);
+                            if (isNaN(h)) return '?';
+                            const t = h * 60 + m + sp.duration_minutes;
+                            return `${String(Math.floor(t / 60) % 24).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+                          })()}
+                        </div>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: 12, color: 'var(--muted)' }}>—</span>
+                    )}
                   </div>
                   {/* Segment */}
                   <div style={{ minWidth: 0, overflow: 'hidden' }}>

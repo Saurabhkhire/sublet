@@ -42,28 +42,34 @@ function fmtTime(hhmm) {
   return `${hh % 12 || 12}:${String(mm).padStart(2, '0')} ${period}`;
 }
 
-// Auto-calculate scheduled times from hackathon start time + cumulative durations.
-// If a speaker has a manual scheduled_start set, use that and resync.
+// Add minutes to a total-minutes value and return HH:MM string.
+function addMinsRaw(totalMins, add) {
+  const t = totalMins + add;
+  return `${String(Math.floor(t / 60) % 24).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+}
+
+// Returns [{start, end}] for each speaker.
+// start/end are display strings like "9:05 AM". Both are tentative.
+// Uses the speaker's own scheduled_start if set, otherwise cascades from hackathon start_time.
 function calcScheduledTimes(speakers, startStr) {
-  if (!startStr && speakers.every((s) => !s.scheduled_start)) return speakers.map(() => '');
+  const noBase = !startStr && speakers.every((s) => !s.scheduled_start);
+  if (noBase) return speakers.map(() => ({ start: '', end: '' }));
+
   let totalMins = 0;
   if (startStr) {
     const [hh, mm] = startStr.split(':').map(Number);
     totalMins = hh * 60 + mm;
   }
+
   return speakers.map((sp) => {
     if (sp.scheduled_start) {
       const parts = sp.scheduled_start.split(':');
-      if (parts.length === 2) totalMins = Number(parts[0]) * 60 + Number(parts[1]) + sp.duration_minutes;
-      else totalMins += sp.duration_minutes;
-      return fmtTime(sp.scheduled_start);
+      if (parts.length === 2) totalMins = Number(parts[0]) * 60 + Number(parts[1]);
     }
-    if (!startStr) return '';
-    const h = Math.floor(totalMins / 60) % 24;
-    const m = totalMins % 60;
-    const label = fmtTime(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+    const startHHMM = addMinsRaw(totalMins, 0);
+    const endHHMM   = addMinsRaw(totalMins, sp.duration_minutes);
     totalMins += sp.duration_minutes;
-    return label;
+    return { start: fmtTime(startHHMM), end: fmtTime(endHHMM) };
   });
 }
 
@@ -373,12 +379,15 @@ export default function Schedule() {
 
       {/* ── Timeline ── */}
       <div className="card">
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
           <h3 style={{ margin: 0 }}>Schedule</h3>
           {isAdmin && !isLive && speakers.length > 1 && (
             <span className="faint small">Drag rows to reorder</span>
           )}
         </div>
+        <p className="faint small" style={{ marginTop: 0, marginBottom: 12 }}>
+          Times are tentative — they shift automatically based on when you actually start the event.
+        </p>
 
         {speakers.length === 0 && (
           <p className="faint small" style={{ margin: 0 }}>
@@ -413,9 +422,16 @@ export default function Schedule() {
                   transition: 'background 0.15s',
                 }}
               >
-                {/* Time */}
-                <div style={{ width: 68, fontSize: 13, color: 'var(--muted)', flexShrink: 0 }}>
-                  {scheduledTimes[idx] || '—'}
+                {/* Time: start → end */}
+                <div style={{ width: 100, flexShrink: 0 }}>
+                  {scheduledTimes[idx]?.start ? (
+                    <>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{scheduledTimes[idx].start}</div>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7 }}>→ {scheduledTimes[idx].end}</div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>—</div>
+                  )}
                 </div>
 
                 {/* Info */}
