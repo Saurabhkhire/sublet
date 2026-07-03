@@ -297,3 +297,46 @@ export async function migrateLegacy() {
 
   console.log(`[migrate] done — all existing data moved to "Ziward Hackathon" (id ${hid})`);
 }
+
+// Adds voice_enabled, submission_deadline, submission_rules, judging_rules to hackathons,
+// and creates the smtp_config table.
+export async function migrateVoiceAndRules() {
+  if (isPg) {
+    await run("ALTER TABLE hackathons ADD COLUMN IF NOT EXISTS voice_enabled INTEGER NOT NULL DEFAULT 0");
+    await run("ALTER TABLE hackathons ADD COLUMN IF NOT EXISTS submission_deadline TEXT NOT NULL DEFAULT ''");
+    await run("ALTER TABLE hackathons ADD COLUMN IF NOT EXISTS submission_rules TEXT NOT NULL DEFAULT ''");
+    await run("ALTER TABLE hackathons ADD COLUMN IF NOT EXISTS judging_rules TEXT NOT NULL DEFAULT ''");
+    await run(`CREATE TABLE IF NOT EXISTS smtp_config (
+      id SERIAL PRIMARY KEY,
+      host TEXT NOT NULL DEFAULT '',
+      port INTEGER NOT NULL DEFAULT 587,
+      secure INTEGER NOT NULL DEFAULT 0,
+      smtp_user TEXT NOT NULL DEFAULT '',
+      smtp_pass TEXT NOT NULL DEFAULT '',
+      from_name TEXT NOT NULL DEFAULT '',
+      from_email TEXT NOT NULL DEFAULT ''
+    )`);
+    return;
+  }
+  const add = async (table, col, type) => {
+    if (!(await tableExists(table))) return;
+    const cols = await columnNames(table);
+    if (!cols.includes(col)) await run(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+  };
+  await add('hackathons', 'voice_enabled', 'INTEGER NOT NULL DEFAULT 0');
+  await add('hackathons', 'submission_deadline', "TEXT NOT NULL DEFAULT ''");
+  await add('hackathons', 'submission_rules', "TEXT NOT NULL DEFAULT ''");
+  await add('hackathons', 'judging_rules', "TEXT NOT NULL DEFAULT ''");
+  if (!(await tableExists('smtp_config'))) {
+    await run(`CREATE TABLE smtp_config (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      host TEXT NOT NULL DEFAULT '',
+      port INTEGER NOT NULL DEFAULT 587,
+      secure INTEGER NOT NULL DEFAULT 0,
+      smtp_user TEXT NOT NULL DEFAULT '',
+      smtp_pass TEXT NOT NULL DEFAULT '',
+      from_name TEXT NOT NULL DEFAULT '',
+      from_email TEXT NOT NULL DEFAULT ''
+    )`);
+  }
+}

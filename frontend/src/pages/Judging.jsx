@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { get, post } from '../api.js';
 
@@ -54,6 +54,8 @@ export default function Judging() {
   const [comments, setComments] = useState('');
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
+  const [timesUpSlot, setTimesUpSlot] = useState(null);
+  const dismissedRef = useRef(null);
 
   function loadProjects() {
     const q = sponsorFilter ? `?sponsor=${sponsorFilter}` : '';
@@ -62,6 +64,29 @@ export default function Judging() {
   useEffect(loadProjects, [sponsorFilter, hid]);
   useEffect(() => {
     get(`/api/hackathons/${hid}/judging-groups`).then(setJgData).catch(() => {});
+  }, [hid]);
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const slots = await get(`/api/hackathons/${hid}/demo-slots`);
+        const speaking = slots.find((s) => s.status === 'speaking' && s.actual_start);
+        if (speaking && speaking.id !== dismissedRef.current) {
+          const endMs = new Date(speaking.actual_start).getTime() + speaking.duration_minutes * 60000;
+          if (Date.now() >= endMs) {
+            setTimesUpSlot(speaking);
+          } else {
+            setTimesUpSlot(null);
+          }
+        } else if (!speaking) {
+          setTimesUpSlot(null);
+          dismissedRef.current = null;
+        }
+      } catch (_) {}
+    };
+    const iv = setInterval(check, 8000);
+    check();
+    return () => clearInterval(iv);
   }, [hid]);
 
   async function openProject(p) {
@@ -123,6 +148,33 @@ export default function Judging() {
       {view === 'invest' && <InvestmentsView ranked={byInvestment} onOpen={setDetail} />}
 
       {detail && <DetailModal project={detail} criteria={criteria} onClose={() => setDetail(null)} />}
+
+      {timesUpSlot && (
+        <>
+          <style>{`
+            @keyframes timesUpPulse { from { transform: scale(1); opacity: 1; } to { transform: scale(1.06); opacity: 0.85; } }
+            @keyframes timesUpFade  { from { opacity: 0; } to { opacity: 1; } }
+          `}</style>
+          <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 9999,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 20, animation: 'timesUpFade 0.3s ease',
+          }}>
+            <div style={{ fontSize: 80, fontWeight: 900, color: '#ef4444', lineHeight: 1, animation: 'timesUpPulse 0.6s infinite alternate', letterSpacing: 2 }}>
+              ⏰ TIME'S UP!
+            </div>
+            <div style={{ fontSize: 26, color: '#fff', fontWeight: 700, textAlign: 'center', maxWidth: 480, padding: '0 24px' }}>
+              {timesUpSlot.project_name || timesUpSlot.custom_name || 'Demo'}
+            </div>
+            <div style={{ color: '#9ca3af', fontSize: 15 }}>Demo time has ended — please wrap up</div>
+            <button
+              style={{ marginTop: 12, padding: '12px 40px', fontSize: 16, background: '#ef4444', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, letterSpacing: 0.5 }}
+              onClick={() => { dismissedRef.current = timesUpSlot.id; setTimesUpSlot(null); }}>
+              Dismiss
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

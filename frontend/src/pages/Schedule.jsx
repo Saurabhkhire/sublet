@@ -26,6 +26,16 @@ function playTimeUp() {
   setTimeout(() => playBeep(880, 0.25), 640);
 }
 
+function speakVoice(text) {
+  try {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.9;
+    window.speechSynthesis.speak(u);
+  } catch (_) {}
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function fmtSecs(secs) {
@@ -179,13 +189,21 @@ export default function Schedule() {
   }, [timeLeft, isLive, current, isPaused]);
 
   // ── actions ───────────────────────────────────────────────────────────────
-  async function activateSpeaker(list, id) {
+  async function activateSpeaker(list, id, isFirst = false) {
     alerted2.current  = false;
     alertedEnd.current = false;
     setCurrentId(id);
     setElapsed(0);
     setIsPaused(false);
     startTimer();
+    if (meta.hackathon.voice_enabled) {
+      const sp = (list || speakers).find((s) => s.id === id);
+      if (sp) {
+        const from = sp.title ? ` from ${sp.title}` : '';
+        const about = sp.notes ? ` They will be talking about ${sp.notes}.` : '';
+        speakVoice(`Our ${isFirst ? 'first' : 'next'} speaker is ${sp.name}${from}.${about} Please give them a warm welcome.`);
+      }
+    }
     await put(`/api/hackathons/${hid}/speakers/${id}`, {
       status: 'speaking',
       actual_start: new Date().toISOString(),
@@ -198,7 +216,7 @@ export default function Schedule() {
     if (!first) return;
     setIsLive(true);
     setLiveStartedAt(new Date());
-    await activateSpeaker(speakers, first.id);
+    await activateSpeaker(speakers, first.id, true);
   }
 
   async function stopEvent() {

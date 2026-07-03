@@ -13,6 +13,8 @@ import speakerRoutes from './routes/speakers.js';
 import judgingGroupRoutes from './routes/judging-groups.js';
 import demoSlotRoutes from './routes/demo-slots.js';
 import metaRoutes from './routes/meta.js';
+import smtpRoutes from './routes/smtp.js';
+import emailRoutes from './routes/emails.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -33,6 +35,8 @@ export async function createApp() {
   app.use('/api/hackathons/:hid/speakers', speakerRoutes);
   app.use('/api/hackathons/:hid/judging-groups', judgingGroupRoutes);
   app.use('/api/hackathons/:hid/demo-slots', demoSlotRoutes);
+  app.use('/api/hackathons/:hid/emails', emailRoutes);
+  app.use('/api/smtp-config', smtpRoutes);
 
   app.use((err, _req, res, _next) => {
     console.error('[error]', err);

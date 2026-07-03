@@ -22,6 +22,16 @@ function playTimeUp() {
   setTimeout(() => playBeep(880, 0.25), 640);
 }
 
+function speakVoice(text) {
+  try {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.9;
+    window.speechSynthesis.speak(u);
+  } catch (_) {}
+}
+
 function fmtSecs(secs) {
   const a = Math.abs(Math.round(secs));
   return `${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`;
@@ -133,6 +143,9 @@ export default function DemoSchedule() {
     setCurrentId(first.id); setPendingId(null);
     setElapsed(0); setLiveStartedAt(now);
     startTimer(now);
+    if (meta.hackathon.voice_enabled) {
+      speakVoice(`Our first demo is from team ${slotName(first)}. Please welcome the team.`);
+    }
     await put(`${base}/${first.id}`, { status: 'speaking', actual_start: new Date().toISOString() });
     await load();
   }
@@ -149,6 +162,9 @@ export default function DemoSchedule() {
         setCurrentId(next.id); setPendingId(null);
         setElapsed(0); setLiveStartedAt(now);
         startTimer(now);
+        if (meta.hackathon.voice_enabled) {
+          speakVoice(`Our next demo is from team ${slotName(next)}. Please welcome the team.`);
+        }
         await put(`${base}/${next.id}`, { status: 'speaking', actual_start: new Date().toISOString() });
       } else {
         stopTimer(); setIsLive(false); setCurrentId(null); setPendingId(null);
@@ -163,10 +179,14 @@ export default function DemoSchedule() {
 
   async function startPending() {
     if (!pendingId) return;
+    const pending = pendingSlot();
     const now = Date.now();
     setCurrentId(pendingId); setPendingId(null);
     setElapsed(0); setLiveStartedAt(now);
     startTimer(now);
+    if (meta.hackathon.voice_enabled && pending) {
+      speakVoice(`Our next demo is from team ${slotName(pending)}. Please welcome the team.`);
+    }
     await put(`${base}/${pendingId}`, { status: 'speaking', actual_start: new Date().toISOString() });
     await load();
   }

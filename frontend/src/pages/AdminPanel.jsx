@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { get, post, put, del } from '../api.js';
 import UserSearchInput from '../components/UserSearchInput.jsx';
@@ -16,6 +16,9 @@ export default function AdminPanel() {
       <SpeakersSection hid={hid} />
       <DemoSlotsSection hid={hid} />
       <AwardsSection hid={hid} />
+      <VoiceRulesSection hid={hid} meta={meta} reload={reload} />
+      <SmtpConfigSection />
+      <EmailsSection hid={hid} meta={meta} />
       <ProjectsSection hid={hid} meta={meta} />
       <MatchingSection hid={hid} />
       <DangerZone hid={hid} name={meta.hackathon.name} />
@@ -29,6 +32,7 @@ function DetailsSection({ hid, meta, reload }) {
   const [form, setForm] = useState({
     name: h.name, details: h.details, support_info: h.support_info || '', schedule: h.schedule || '',
     event_date: h.event_date || '', start_time: h.start_time || '', end_time: h.end_time || '', location: h.location || '',
+    voice_enabled: !!h.voice_enabled, submission_deadline: h.submission_deadline || '',
   });
   const [msg, setMsg] = useState('');
   async function save(e) {
@@ -54,7 +58,14 @@ function DetailsSection({ hid, meta, reload }) {
           <label style={{ flex: 1, minWidth: 110 }}>End time
             <input type="time" value={form.end_time} onChange={(e) => set('end_time', e.target.value)} />
           </label>
+          <label style={{ flex: 1, minWidth: 130 }}>Submission deadline <span className="faint small">(UTC, +30 min grace)</span>
+            <input type="time" value={form.submission_deadline} onChange={(e) => set('submission_deadline', e.target.value)} />
+          </label>
         </div>
+        <label style={{ flexDirection: 'row', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+          <input type="checkbox" checked={!!form.voice_enabled} onChange={(e) => set('voice_enabled', e.target.checked)} style={{ width: 'auto', margin: 0 }} />
+          <span>Enable voice announcements <span className="faint small">(speaker &amp; demo day intros via browser text-to-speech)</span></span>
+        </label>
         <label>Location
           <input value={form.location} onChange={(e) => set('location', e.target.value)} placeholder="Venue address or online link" />
         </label>
@@ -1062,6 +1073,243 @@ function AwardsSection({ hid }) {
                 } catch (e) { setError(e.message); }
               }}>✕</button>
             )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ── Voice & Rules Section ─────────────────────────────────────────────────────
+function speak(text) {
+  try {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.9;
+    window.speechSynthesis.speak(u);
+  } catch (_) {}
+}
+function stopSpeak() { try { window.speechSynthesis?.cancel(); } catch (_) {} }
+
+function defaultSubmissionRules(meta) {
+  const h = meta.hackathon;
+  const tracks = (meta.tracks || []).map((t) => t.name).join(', ');
+  const sponsors = (meta.sponsors || []).map((s) => s.name).join(', ');
+  const deadline = h.submission_deadline ? ` by ${h.submission_deadline} UTC` : '';
+  return `Welcome to ${h.name}!
+
+Submissions: Submit your project through the platform. Include your project name, a short description, team members, and a demo video link if available.
+
+Deadline: Please submit your project${deadline}. There is a 30-minute grace period after the deadline. Late submissions may not be assigned a judging group.
+${tracks ? `\nTracks: This hackathon has the following themed tracks: ${tracks}. Select the track(s) that best represent your project.\n` : ''}${sponsors ? `\nSponsors: Our sponsors have special prizes. Build using their tools or APIs to be eligible for sponsor awards: ${sponsors}.\n` : ''}
+Judging Groups: Projects will be organized into judging groups (A, B, C…) based on submission order. Your group determines your demo time slot during judging.
+
+Demo Day: Each team will present their project to a panel of judges. Prepare a short demo — the time per project is limited, so be concise and focused.
+
+After submitting, you can still edit your project details until judging begins.
+
+Good luck and have fun building!`.trim();
+}
+
+function defaultJudgingRules(meta) {
+  const h = meta.hackathon;
+  const jcfg = meta.judging_config;
+  const perProject = jcfg?.per_project_minutes ? `${jcfg.per_project_minutes} minutes` : 'a few minutes';
+  const total = jcfg?.judge_time_minutes ? `${jcfg.judge_time_minutes} minutes` : 'a set amount of time';
+  return `Welcome, Judges! Thank you for participating at ${h.name}.
+
+Group Assignment: You will be assigned to a judging group (A, B, C…) when you mark your attendance. Each group evaluates a specific set of projects during a dedicated time slot.
+
+Scoring: Rate each project on 5 criteria — Presentation, Execution, Innovation, Impact, and Implementation — on a scale of 0 to 100. The total score is the average of all five criteria.
+
+Investment: You can also indicate how much you would invest in a project (in thousands). This is tracked separately from the score and helps identify the most promising projects.
+
+Time: You have ${perProject} per project and ${total} in total for your group. Please manage your time carefully and be concise with your questions.
+
+Comments: Please leave constructive written feedback for each team. Participants greatly value your insights and suggestions.
+
+Fair Judging: Evaluate all projects honestly and independently. If you have a personal connection to a team, please declare it to the organiser.
+
+Thank you for making this event possible!`.trim();
+}
+
+function VoiceRulesSection({ hid, meta, reload }) {
+  const h = meta.hackathon;
+  const [subRules, setSubRules] = useState(h.submission_rules || '');
+  const [judgeRules, setJudgeRules] = useState(h.judging_rules || '');
+  const [msg, setMsg] = useState('');
+
+  async function save() {
+    await put(`/api/hackathons/${hid}`, {
+      name: h.name, details: h.details || '', support_info: h.support_info || '',
+      schedule: h.schedule || '', event_date: h.event_date || '',
+      start_time: h.start_time || '', end_time: h.end_time || '', location: h.location || '',
+      voice_enabled: !!h.voice_enabled, submission_deadline: h.submission_deadline || '',
+      submission_rules: subRules, judging_rules: judgeRules,
+    });
+    await reload();
+    setMsg('Saved!'); setTimeout(() => setMsg(''), 1500);
+  }
+
+  return (
+    <section className="card">
+      <h3 style={{ marginTop: 0 }}>📢 Announcement Rules</h3>
+      <p className="faint small" style={{ marginTop: 0 }}>Write the rules to be read out loud to participants and judges. Voices must be enabled (in Hackathon Details above).</p>
+
+      <label>
+        Participant Submission Rules
+        <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+          <button type="button" className="outline" style={{ padding: '3px 10px', fontSize: 12 }}
+            onClick={() => speak(subRules || 'No submission rules written yet.')}>▶ Play</button>
+          <button type="button" className="outline" style={{ padding: '3px 10px', fontSize: 12 }}
+            onClick={stopSpeak}>■ Stop</button>
+          {!subRules && (
+            <button type="button" className="outline" style={{ padding: '3px 10px', fontSize: 12 }}
+              onClick={() => setSubRules(defaultSubmissionRules(meta))}>✨ Generate default</button>
+          )}
+        </div>
+        <textarea rows={8} value={subRules} onChange={(e) => setSubRules(e.target.value)}
+          placeholder="Write the submission rules here. Click 'Generate default' for a starting point." />
+      </label>
+
+      <label style={{ marginTop: 12 }}>
+        Judging Rules
+        <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+          <button type="button" className="outline" style={{ padding: '3px 10px', fontSize: 12 }}
+            onClick={() => speak(judgeRules || 'No judging rules written yet.')}>▶ Play</button>
+          <button type="button" className="outline" style={{ padding: '3px 10px', fontSize: 12 }}
+            onClick={stopSpeak}>■ Stop</button>
+          {!judgeRules && (
+            <button type="button" className="outline" style={{ padding: '3px 10px', fontSize: 12 }}
+              onClick={() => setJudgeRules(defaultJudgingRules(meta))}>✨ Generate default</button>
+          )}
+        </div>
+        <textarea rows={8} value={judgeRules} onChange={(e) => setJudgeRules(e.target.value)}
+          placeholder="Write the judging rules here. Click 'Generate default' for a starting point." />
+      </label>
+
+      <div className="row" style={{ marginTop: 12 }}><button type="button" onClick={save}>Save rules</button>{msg && <span className="success">{msg}</span>}</div>
+    </section>
+  );
+}
+
+// ── SMTP Config Section ───────────────────────────────────────────────────────
+function SmtpConfigSection() {
+  const EMPTY = { host: '', port: '587', secure: false, smtp_user: '', smtp_pass: '', from_name: '', from_email: '' };
+  const [form, setForm] = useState(EMPTY);
+  const [loaded, setLoaded] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    get('/api/smtp-config').then((cfg) => {
+      if (cfg) setForm({ ...cfg, smtp_pass: cfg.smtp_pass || '', port: String(cfg.port || 587) });
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+  }, []);
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  async function save(e) {
+    e.preventDefault();
+    setMsg(''); setErr('');
+    try {
+      await put('/api/smtp-config', { ...form, port: Number(form.port) || 587 });
+      setMsg('SMTP config saved!'); setTimeout(() => setMsg(''), 2000);
+    } catch (e) { setErr(e.message); }
+  }
+
+  if (!loaded) return null;
+
+  return (
+    <section className="card">
+      <h3 style={{ marginTop: 0 }}>📧 Email / SMTP Configuration</h3>
+      <p className="faint small" style={{ marginTop: 0 }}>Configure your email server to send announcements, invites, and reminders. Use Gmail, SendGrid, or any SMTP provider.</p>
+      <form onSubmit={save}>
+        <div className="row" style={{ gap: 16, flexWrap: 'wrap' }}>
+          <label style={{ flex: 3, minWidth: 180 }}>SMTP Host
+            <input value={form.host} onChange={(e) => set('host', e.target.value)} placeholder="smtp.gmail.com" />
+          </label>
+          <label style={{ flex: 1, minWidth: 80 }}>Port
+            <input type="number" value={form.port} onChange={(e) => set('port', e.target.value)} placeholder="587" />
+          </label>
+          <label style={{ flex: 1, minWidth: 80, justifyContent: 'center', paddingTop: 24 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!form.secure} onChange={(e) => set('secure', e.target.checked)} style={{ width: 'auto', margin: 0 }} />
+              SSL/TLS
+            </span>
+          </label>
+        </div>
+        <div className="row" style={{ gap: 16, flexWrap: 'wrap' }}>
+          <label style={{ flex: 1, minWidth: 160 }}>SMTP Username / Email
+            <input value={form.smtp_user} onChange={(e) => set('smtp_user', e.target.value)} placeholder="you@gmail.com" autoComplete="off" />
+          </label>
+          <label style={{ flex: 1, minWidth: 160 }}>SMTP Password / App Password
+            <input type="password" value={form.smtp_pass} onChange={(e) => set('smtp_pass', e.target.value)} placeholder="App password or SMTP key" autoComplete="new-password" />
+          </label>
+        </div>
+        <div className="row" style={{ gap: 16, flexWrap: 'wrap' }}>
+          <label style={{ flex: 1, minWidth: 140 }}>From Name
+            <input value={form.from_name} onChange={(e) => set('from_name', e.target.value)} placeholder="Hackathon Team" />
+          </label>
+          <label style={{ flex: 1, minWidth: 180 }}>From Email
+            <input type="email" value={form.from_email} onChange={(e) => set('from_email', e.target.value)} placeholder="noreply@yourhackathon.com" />
+          </label>
+        </div>
+        <div className="row"><button type="submit">Save SMTP config</button>{msg && <span className="success">{msg}</span>}{err && <span className="error">{err}</span>}</div>
+      </form>
+    </section>
+  );
+}
+
+// ── Emails Section ────────────────────────────────────────────────────────────
+const EMAIL_TYPES = [
+  { type: 'judge_invite',         label: '📨 Invite judges + judging instructions',     audience: 'judges' },
+  { type: 'participant_rules',    label: '📋 Participant submission instructions',        audience: 'participants' },
+  { type: 'participant_schedule', label: '🗓 Participant demo schedule & group',          audience: 'participants' },
+  { type: 'judge_schedule',       label: '🗓 Judge group & project schedule',             audience: 'judges' },
+  { type: 'judge_thankyou',       label: '🙏 Thank-you email to judges',                 audience: 'judges' },
+  { type: 'participant_reminder', label: '🔔 Reminder: submit your project',             audience: 'participants' },
+  { type: 'deadline_reminder',    label: '⚠️ Urgent deadline reminder (participants)',   audience: 'participants' },
+];
+
+function EmailsSection({ hid, meta }) {
+  const [results, setResults] = useState({});
+  const [busy, setBusy] = useState({});
+
+  async function send(type) {
+    setBusy((b) => ({ ...b, [type]: true }));
+    setResults((r) => ({ ...r, [type]: null }));
+    try {
+      const res = await post(`/api/hackathons/${hid}/emails/${type}`, {});
+      setResults((r) => ({ ...r, [type]: { ok: true, msg: `Sent to ${res.sent} recipient${res.sent !== 1 ? 's' : ''}${res.errors?.length ? ` (${res.errors.length} failed)` : ''}.` } }));
+    } catch (e) {
+      setResults((r) => ({ ...r, [type]: { ok: false, msg: e.message } }));
+    } finally {
+      setBusy((b) => ({ ...b, [type]: false }));
+    }
+  }
+
+  return (
+    <section className="card">
+      <h3 style={{ marginTop: 0 }}>✉️ Send Emails</h3>
+      <p className="faint small" style={{ marginTop: 0 }}>Configure SMTP above before sending. Emails are sent immediately to all matching recipients.</p>
+      <div className="stack" style={{ gap: 10 }}>
+        {EMAIL_TYPES.map(({ type, label, audience }) => (
+          <div key={type} className="spread" style={{ flexWrap: 'wrap', gap: 8, padding: '10px 12px', background: 'var(--surface,#f8f8f8)', borderRadius: 8 }}>
+            <div>
+              <div style={{ fontWeight: 500, fontSize: 14 }}>{label}</div>
+              <div className="faint small">Sends to all {audience} of this hackathon</div>
+            </div>
+            <div className="row" style={{ gap: 8 }}>
+              {results[type] && (
+                <span className={results[type].ok ? 'success' : 'error'} style={{ fontSize: 13 }}>{results[type].msg}</span>
+              )}
+              <button type="button" style={{ padding: '5px 14px', fontSize: 13 }} disabled={!!busy[type]} onClick={() => send(type)}>
+                {busy[type] ? 'Sending…' : 'Send'}
+              </button>
+            </div>
           </div>
         ))}
       </div>
