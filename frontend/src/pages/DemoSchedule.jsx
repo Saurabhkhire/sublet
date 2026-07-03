@@ -260,6 +260,16 @@ export default function DemoSchedule() {
           ) : (
             <button style={B_RED} onClick={async () => { stopTimer(); setIsLive(false); setCurrentId(null); setPendingId(null); }}>■ End</button>
           )}
+          {slots.some((s) => s.status !== 'scheduled') && (
+            <button style={B_GRY} onClick={async () => {
+              if (!confirm('Reset all demo slots back to Scheduled? This clears live event progress.')) return;
+              stopTimer(); setIsLive(false); setCurrentId(null); setPendingId(null); setElapsed(0);
+              for (const s of slots) {
+                if (s.status !== 'scheduled') await put(`${base}/${s.id}`, { status: 'scheduled', actual_start: '', actual_end: '' });
+              }
+              await load();
+            }}>↺ Reset All</button>
+          )}
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
             <input type="checkbox" checked={autoStart} onChange={(e) => handleAutoStart(e.target.checked)} />
             Auto-advance to next demo
