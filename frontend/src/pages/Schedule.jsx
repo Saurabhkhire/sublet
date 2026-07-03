@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { get, put } from '../api.js';
 import { useAuth } from '../auth.jsx';
@@ -50,10 +50,12 @@ function addMinsRaw(totalMins, add) {
 
 // Returns [{start, end}] for each speaker.
 // start/end are display strings like "9:05 AM". Both are tentative.
+// Returns a display start-time string for each speaker (tentative).
 // Uses the speaker's own scheduled_start if set, otherwise cascades from hackathon start_time.
+// break_after_minutes on each row adds a gap before the NEXT slot.
 function calcScheduledTimes(speakers, startStr) {
   const noBase = !startStr && speakers.every((s) => !s.scheduled_start);
-  if (noBase) return speakers.map(() => ({ start: '', end: '' }));
+  if (noBase) return speakers.map(() => '');
 
   let totalMins = 0;
   if (startStr) {
@@ -66,10 +68,9 @@ function calcScheduledTimes(speakers, startStr) {
       const parts = sp.scheduled_start.split(':');
       if (parts.length === 2) totalMins = Number(parts[0]) * 60 + Number(parts[1]);
     }
-    const startHHMM = addMinsRaw(totalMins, 0);
-    const endHHMM   = addMinsRaw(totalMins, sp.duration_minutes);
-    totalMins += sp.duration_minutes;
-    return { start: fmtTime(startHHMM), end: fmtTime(endHHMM) };
+    const label = fmtTime(addMinsRaw(totalMins, 0));
+    totalMins += sp.duration_minutes + (Number(sp.break_after_minutes) || 0);
+    return label;
   });
 }
 
@@ -402,58 +403,63 @@ export default function Schedule() {
             const isDropTarget = dragOver === idx && dragSrc !== null && dragSrc !== idx;
             const st = STATUS[sp.status] || STATUS.scheduled;
             return (
-              <div
-                key={sp.id}
-                draggable={isAdmin && !isLive}
-                onDragStart={() => setDragSrc(idx)}
-                onDragEnd={() => { setDragSrc(null); setDragOver(null); }}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(idx); }}
-                onDragLeave={() => setDragOver(null)}
-                onDrop={() => { commitReorder(dragSrc, idx); setDragSrc(null); setDragOver(null); }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '10px 12px', borderRadius: 7,
-                  border: isCurrent     ? '1.5px solid var(--accent)'
-                        : isDropTarget  ? '1.5px dashed var(--accent)'
-                        :                 '1.5px solid transparent',
-                  background: isCurrent ? 'var(--surface-2)' : 'transparent',
-                  opacity: (sp.status === 'skipped' || isDragging) ? 0.4 : 1,
-                  cursor: isAdmin && !isLive ? 'grab' : 'default',
-                  transition: 'background 0.15s',
-                }}
-              >
-                {/* Time: start → end */}
-                <div style={{ width: 100, flexShrink: 0 }}>
-                  {scheduledTimes[idx]?.start ? (
-                    <>
-                      <div style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{scheduledTimes[idx].start}</div>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', opacity: 0.7 }}>→ {scheduledTimes[idx].end}</div>
-                    </>
-                  ) : (
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>—</div>
+              <Fragment key={sp.id}>
+                <div
+                  draggable={isAdmin && !isLive}
+                  onDragStart={() => setDragSrc(idx)}
+                  onDragEnd={() => { setDragSrc(null); setDragOver(null); }}
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(idx); }}
+                  onDragLeave={() => setDragOver(null)}
+                  onDrop={() => { commitReorder(dragSrc, idx); setDragSrc(null); setDragOver(null); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '10px 12px', borderRadius: 7,
+                    border: isCurrent     ? '1.5px solid var(--accent)'
+                          : isDropTarget  ? '1.5px dashed var(--accent)'
+                          :                 '1.5px solid transparent',
+                    background: isCurrent ? 'var(--surface-2)' : 'transparent',
+                    opacity: (sp.status === 'skipped' || isDragging) ? 0.4 : 1,
+                    cursor: isAdmin && !isLive ? 'grab' : 'default',
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  {/* Start time */}
+                  <div style={{ width: 72, flexShrink: 0, fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+                    {scheduledTimes[idx] || '—'}
+                  </div>
+
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: isCurrent ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {sp.title || sp.name}
+                    </div>
+                    <div className="faint small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {sp.title ? sp.name : ''}{sp.notes ? (sp.title ? ' · ' : '') + sp.notes : ''}
+                    </div>
+                  </div>
+
+                  {/* Duration */}
+                  <div style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>{sp.duration_minutes} min</div>
+
+                  {/* Status */}
+                  {st.label && (
+                    <div style={{ fontSize: 13, color: st.color, fontWeight: st.bold ? 700 : 400, flexShrink: 0, minWidth: 80, textAlign: 'right' }}>
+                      {st.label}
+                    </div>
                   )}
                 </div>
 
-                {/* Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: isCurrent ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {sp.title || sp.name}
-                  </div>
-                  <div className="faint small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {sp.title ? sp.name : ''}{sp.notes ? (sp.title ? ' · ' : '') + sp.notes : ''}
-                  </div>
-                </div>
-
-                {/* Duration */}
-                <div style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>{sp.duration_minutes} min</div>
-
-                {/* Status */}
-                {st.label && (
-                  <div style={{ fontSize: 13, color: st.color, fontWeight: st.bold ? 700 : 400, flexShrink: 0, minWidth: 80, textAlign: 'right' }}>
-                    {st.label}
+                {/* Break after this slot */}
+                {sp.break_after_minutes > 0 && idx < speakers.length - 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 12px 2px 84px' }}>
+                    <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                    <span style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap', opacity: 0.75 }}>
+                      ☕ {sp.break_after_minutes} min break
+                    </span>
+                    <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                   </div>
                 )}
-              </div>
+              </Fragment>
             );
           })}
         </div>

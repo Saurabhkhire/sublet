@@ -119,6 +119,7 @@ export async function createSchema() {
       actual_start TEXT NOT NULL DEFAULT '',
       actual_end TEXT NOT NULL DEFAULT '',
       notes TEXT NOT NULL DEFAULT '',
+      break_after_minutes INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT '1970-01-01'
     );
 

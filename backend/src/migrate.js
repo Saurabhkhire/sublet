@@ -115,6 +115,19 @@ export async function migrateSpeakerNotes() {
   }
 }
 
+// Adds the break_after_minutes column to the speakers table.
+export async function migrateSpeakerBreak() {
+  if (isPg) {
+    await run('ALTER TABLE speakers ADD COLUMN IF NOT EXISTS break_after_minutes INTEGER NOT NULL DEFAULT 0');
+    return;
+  }
+  if (!(await tableExists('speakers'))) return;
+  const cols = await columnNames('speakers');
+  if (!cols.includes('break_after_minutes')) {
+    await run('ALTER TABLE speakers ADD COLUMN break_after_minutes INTEGER NOT NULL DEFAULT 0');
+  }
+}
+
 export async function migrateLegacy() {
   if (isPg) return; // fresh schema on Postgres; no legacy data to migrate
   if (!(await tableExists('tracks'))) return; // brand-new DB; schema.js already built it
