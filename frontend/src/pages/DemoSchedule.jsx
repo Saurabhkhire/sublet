@@ -22,14 +22,33 @@ function playTimeUp() {
   setTimeout(() => playBeep(880, 0.25), 640);
 }
 
-function speakVoice(text) {
+function applyVoiceMode(u, voiceMode) {
+  u.pitch = voiceMode === 'female' ? 1.4 : 0.7;
+  u.rate  = voiceMode === 'female' ? 1.0 : 0.85;
   try {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.9;
-    window.speechSynthesis.speak(u);
+    const voices   = window.speechSynthesis.getVoices();
+    const enVoices = voices.filter((v) => v.lang.startsWith('en'));
+    if (enVoices.length > 0) {
+      if (voiceMode === 'male') {
+        u.voice = enVoices.find((v) => /male|david|mark|daniel|fred|ralph/i.test(v.name)) || enVoices[0];
+      } else {
+        u.voice = enVoices.find((v) => /female|samantha|victoria|karen|allison|susan|zira/i.test(v.name)) || enVoices[Math.min(1, enVoices.length - 1)];
+      }
+    }
   } catch (_) {}
+}
+function speakVoice(text, voiceMode) {
+  return new Promise((resolve) => {
+    try {
+      if (!window.speechSynthesis || !voiceMode || voiceMode === 'off') { resolve(); return; }
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      applyVoiceMode(u, voiceMode);
+      u.onend  = resolve;
+      u.onerror = resolve;
+      window.speechSynthesis.speak(u);
+    } catch (_) { resolve(); }
+  });
 }
 
 function fmtSecs(secs) {
@@ -138,16 +157,21 @@ export default function DemoSchedule() {
   async function startDemo() {
     const first = slots.find(isEligible);
     if (!first) return;
-    const now = Date.now();
     setIsLive(true); setIsPaused(false);
     setCurrentId(first.id); setPendingId(null);
-    setElapsed(0); setLiveStartedAt(now);
-    startTimer(now);
-    if (meta.hackathon.voice_enabled) {
-      speakVoice(`Our first demo is from team ${slotName(first)}. Please welcome the team.`);
-    }
+    setElapsed(0);
+
+    // Mark speaking first so UI shows LIVE during announcement
     await put(`${base}/${first.id}`, { status: 'speaking', actual_start: new Date().toISOString() });
     await load();
+
+    // Voice announcement — timer only starts AFTER the MC finishes speaking
+    const voiceMode = meta.hackathon.voice_mode || 'off';
+    await speakVoice(`Our first demo is from team ${slotName(first)}. Please welcome the team.`, voiceMode);
+
+    const now = Date.now();
+    setLiveStartedAt(now);
+    startTimer(now);
   }
 
   async function advance() {
@@ -158,18 +182,23 @@ export default function DemoSchedule() {
     if (autoStart || !next) {
       if (cur) await put(`${base}/${cur.id}`, { status: 'completed', actual_end: new Date().toISOString() });
       if (next) {
-        const now = Date.now();
         setCurrentId(next.id); setPendingId(null);
-        setElapsed(0); setLiveStartedAt(now);
-        startTimer(now);
-        if (meta.hackathon.voice_enabled) {
-          speakVoice(`Our next demo is from team ${slotName(next)}. Please welcome the team.`);
-        }
+        setElapsed(0);
+
+        // Mark speaking, then announce, then start timer
         await put(`${base}/${next.id}`, { status: 'speaking', actual_start: new Date().toISOString() });
+        await load();
+
+        const voiceMode = meta.hackathon.voice_mode || 'off';
+        await speakVoice(`Our next demo is from team ${slotName(next)}. Please welcome the team.`, voiceMode);
+
+        const now = Date.now();
+        setLiveStartedAt(now);
+        startTimer(now);
       } else {
         stopTimer(); setIsLive(false); setCurrentId(null); setPendingId(null);
+        await load();
       }
-      await load();
     } else {
       if (cur) await put(`${base}/${cur.id}`, { status: 'completed', actual_end: new Date().toISOString() });
       stopTimer(); setPendingId(next.id); setCurrentId(null); setElapsed(0);
@@ -180,15 +209,21 @@ export default function DemoSchedule() {
   async function startPending() {
     if (!pendingId) return;
     const pending = pendingSlot();
-    const now = Date.now();
     setCurrentId(pendingId); setPendingId(null);
-    setElapsed(0); setLiveStartedAt(now);
-    startTimer(now);
-    if (meta.hackathon.voice_enabled && pending) {
-      speakVoice(`Our next demo is from team ${slotName(pending)}. Please welcome the team.`);
-    }
+    setElapsed(0);
+
+    // Mark speaking, then announce, then start timer
     await put(`${base}/${pendingId}`, { status: 'speaking', actual_start: new Date().toISOString() });
     await load();
+
+    const voiceMode = meta.hackathon.voice_mode || 'off';
+    if (pending) {
+      await speakVoice(`Our next demo is from team ${slotName(pending)}. Please welcome the team.`, voiceMode);
+    }
+
+    const now = Date.now();
+    setLiveStartedAt(now);
+    startTimer(now);
   }
 
   async function skipCurrent() {

@@ -26,14 +26,33 @@ function playTimeUp() {
   setTimeout(() => playBeep(880, 0.25), 640);
 }
 
-function speakVoice(text) {
+function applyVoiceMode(u, voiceMode) {
+  u.pitch = voiceMode === 'female' ? 1.4 : 0.7;
+  u.rate  = voiceMode === 'female' ? 1.0 : 0.85;
   try {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.9;
-    window.speechSynthesis.speak(u);
+    const voices   = window.speechSynthesis.getVoices();
+    const enVoices = voices.filter((v) => v.lang.startsWith('en'));
+    if (enVoices.length > 0) {
+      if (voiceMode === 'male') {
+        u.voice = enVoices.find((v) => /male|david|mark|daniel|fred|ralph/i.test(v.name)) || enVoices[0];
+      } else {
+        u.voice = enVoices.find((v) => /female|samantha|victoria|karen|allison|susan|zira/i.test(v.name)) || enVoices[Math.min(1, enVoices.length - 1)];
+      }
+    }
   } catch (_) {}
+}
+function speakVoice(text, voiceMode) {
+  return new Promise((resolve) => {
+    try {
+      if (!window.speechSynthesis || !voiceMode || voiceMode === 'off') { resolve(); return; }
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      applyVoiceMode(u, voiceMode);
+      u.onend  = resolve;
+      u.onerror = resolve;
+      window.speechSynthesis.speak(u);
+    } catch (_) { resolve(); }
+  });
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -124,9 +143,10 @@ export default function Schedule() {
     try { return localStorage.getItem('schedAutoStart') !== 'false'; } catch { return true; }
   });
 
-  const timerRef    = useRef(null);
-  const alerted2    = useRef(false);
-  const alertedEnd  = useRef(false);
+  const timerRef      = useRef(null);
+  const alerted2      = useRef(false);
+  const alertedEnd    = useRef(false);
+  const activationRef = useRef(0);
 
   const [dragSrc, setDragSrc]   = useState(null);
   const [dragOver, setDragOver] = useState(null);
@@ -190,25 +210,38 @@ export default function Schedule() {
 
   // ── actions ───────────────────────────────────────────────────────────────
   async function activateSpeaker(list, id, isFirst = false) {
-    alerted2.current  = false;
+    const myActivation = ++activationRef.current;
+    alerted2.current   = false;
     alertedEnd.current = false;
     setCurrentId(id);
     setElapsed(0);
     setIsPaused(false);
-    startTimer();
-    if (meta.hackathon.voice_enabled) {
-      const sp = (list || speakers).find((s) => s.id === id);
-      if (sp) {
-        const from = sp.title ? ` from ${sp.title}` : '';
-        const about = sp.notes ? ` They will be talking about ${sp.notes}.` : '';
-        speakVoice(`Our ${isFirst ? 'first' : 'next'} speaker is ${sp.name}${from}.${about} Please give them a warm welcome.`);
-      }
-    }
+
+    // Mark speaking immediately so the LIVE badge shows during the announcement
     await put(`/api/hackathons/${hid}/speakers/${id}`, {
       status: 'speaking',
       actual_start: new Date().toISOString(),
     });
     setSpeakers((prev) => prev.map((s) => s.id === id ? { ...s, status: 'speaking' } : s));
+
+    // Voice announcement — timer only starts AFTER the MC finishes speaking
+    const voiceMode = meta.hackathon.voice_mode || 'off';
+    if (voiceMode !== 'off') {
+      const sp = (list || speakers).find((s) => s.id === id);
+      if (sp) {
+        const from  = sp.title ? ` from ${sp.title}` : '';
+        const about = sp.notes ? ` They will be talking about ${sp.notes}.` : '';
+        await speakVoice(
+          `Our ${isFirst ? 'first' : 'next'} speaker is ${sp.name}${from}.${about} Please give them a warm welcome.`,
+          voiceMode
+        );
+      }
+    }
+
+    // Only start the timer if this is still the current activation (not superseded)
+    if (activationRef.current === myActivation) {
+      startTimer();
+    }
   }
 
   async function startEvent() {
@@ -244,7 +277,7 @@ export default function Schedule() {
         });
       }
     }
-    load();
+    await load();
   }
 
   function pause()  { setIsPaused(true);  stopTimer(); }

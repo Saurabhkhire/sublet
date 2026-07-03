@@ -32,7 +32,7 @@ function DetailsSection({ hid, meta, reload }) {
   const [form, setForm] = useState({
     name: h.name, details: h.details, support_info: h.support_info || '', schedule: h.schedule || '',
     event_date: h.event_date || '', start_time: h.start_time || '', end_time: h.end_time || '', location: h.location || '',
-    voice_enabled: !!h.voice_enabled, submission_deadline: h.submission_deadline || '',
+    voice_mode: h.voice_mode || 'off', submission_deadline: h.submission_deadline || '',
   });
   const [msg, setMsg] = useState('');
   async function save(e) {
@@ -62,9 +62,12 @@ function DetailsSection({ hid, meta, reload }) {
             <input type="time" value={form.submission_deadline} onChange={(e) => set('submission_deadline', e.target.value)} />
           </label>
         </div>
-        <label style={{ flexDirection: 'row', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <input type="checkbox" checked={!!form.voice_enabled} onChange={(e) => set('voice_enabled', e.target.checked)} style={{ width: 'auto', margin: 0 }} />
-          <span>Enable voice announcements <span className="faint small">(speaker &amp; demo day intros via browser text-to-speech)</span></span>
+        <label>Voice announcements <span className="faint small">(browser text-to-speech for speaker &amp; demo day intros)</span>
+          <select value={form.voice_mode} onChange={(e) => set('voice_mode', e.target.value)}>
+            <option value="off">No voice</option>
+            <option value="male">Male voice</option>
+            <option value="female">Female voice</option>
+          </select>
         </label>
         <label>Location
           <input value={form.location} onChange={(e) => set('location', e.target.value)} placeholder="Venue address or online link" />
@@ -1081,12 +1084,29 @@ function AwardsSection({ hid }) {
 }
 
 // ── Voice & Rules Section ─────────────────────────────────────────────────────
-function speak(text) {
+function applyVoiceMode(u, voiceMode) {
+  u.pitch = voiceMode === 'female' ? 1.4 : 0.7;
+  u.rate  = voiceMode === 'female' ? 1.0 : 0.85;
+  try {
+    const voices   = window.speechSynthesis.getVoices();
+    const enVoices = voices.filter((v) => v.lang.startsWith('en'));
+    if (enVoices.length > 0) {
+      if (voiceMode === 'male') {
+        const mv = enVoices.find((v) => /male|david|mark|daniel|fred|ralph/i.test(v.name)) || enVoices[0];
+        u.voice = mv;
+      } else {
+        const fv = enVoices.find((v) => /female|samantha|victoria|karen|allison|susan|zira/i.test(v.name)) || enVoices[Math.min(1, enVoices.length - 1)];
+        u.voice = fv;
+      }
+    }
+  } catch (_) {}
+}
+function speak(text, voiceMode = 'female') {
   try {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 0.9;
+    applyVoiceMode(u, voiceMode);
     window.speechSynthesis.speak(u);
   } catch (_) {}
 }
@@ -1145,7 +1165,7 @@ function VoiceRulesSection({ hid, meta, reload }) {
       name: h.name, details: h.details || '', support_info: h.support_info || '',
       schedule: h.schedule || '', event_date: h.event_date || '',
       start_time: h.start_time || '', end_time: h.end_time || '', location: h.location || '',
-      voice_enabled: !!h.voice_enabled, submission_deadline: h.submission_deadline || '',
+      voice_mode: h.voice_mode || 'off', submission_deadline: h.submission_deadline || '',
       submission_rules: subRules, judging_rules: judgeRules,
     });
     await reload();
@@ -1161,7 +1181,7 @@ function VoiceRulesSection({ hid, meta, reload }) {
         Participant Submission Rules
         <div className="row" style={{ gap: 8, marginBottom: 4 }}>
           <button type="button" className="outline" style={{ padding: '3px 10px', fontSize: 12 }}
-            onClick={() => speak(subRules || 'No submission rules written yet.')}>▶ Play</button>
+            onClick={() => speak(subRules || 'No submission rules written yet.', meta.hackathon.voice_mode || 'female')}>▶ Play</button>
           <button type="button" className="outline" style={{ padding: '3px 10px', fontSize: 12 }}
             onClick={stopSpeak}>■ Stop</button>
           {!subRules && (
@@ -1177,7 +1197,7 @@ function VoiceRulesSection({ hid, meta, reload }) {
         Judging Rules
         <div className="row" style={{ gap: 8, marginBottom: 4 }}>
           <button type="button" className="outline" style={{ padding: '3px 10px', fontSize: 12 }}
-            onClick={() => speak(judgeRules || 'No judging rules written yet.')}>▶ Play</button>
+            onClick={() => speak(judgeRules || 'No judging rules written yet.', meta.hackathon.voice_mode || 'female')}>▶ Play</button>
           <button type="button" className="outline" style={{ padding: '3px 10px', fontSize: 12 }}
             onClick={stopSpeak}>■ Stop</button>
           {!judgeRules && (

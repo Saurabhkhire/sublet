@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
   }
 
   const judges = await all(
-    `SELECT hj.user_id, hj.judge_group, hj.attended_at, u.email, u.name
+    `SELECT hj.user_id, hj.judge_group, hj.attended_at, u.email
      FROM hackathon_judges hj
      JOIN users u ON u.id = hj.user_id
      WHERE hj.hackathon_id = ? ORDER BY hj.attended_at`,
@@ -67,7 +67,7 @@ router.get('/', async (req, res) => {
     projects_per_group,
     group_count_needed,
     groups,
-    all_judges: judges.map((j) => ({ user_id: j.user_id, email: j.email, name: j.name || '', judge_group: j.judge_group, attended_at: j.attended_at })),
+    all_judges: judges.map((j) => ({ user_id: j.user_id, email: j.email, judge_group: j.judge_group, attended_at: j.attended_at })),
     unassigned_projects: projects.filter((p) => !p.judge_group).length,
     my_judge_group: myJudge?.judge_group || null,
     my_judge_attended: !!myJudge?.attended_at,
