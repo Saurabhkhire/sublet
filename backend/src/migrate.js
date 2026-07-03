@@ -102,6 +102,19 @@ export async function migrateInvestment() {
   }
 }
 
+// Adds the notes column to the speakers table.
+export async function migrateSpeakerNotes() {
+  if (isPg) {
+    await run('ALTER TABLE speakers ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT \'\'');
+    return;
+  }
+  if (!(await tableExists('speakers'))) return;
+  const cols = await columnNames('speakers');
+  if (!cols.includes('notes')) {
+    await run('ALTER TABLE speakers ADD COLUMN notes TEXT NOT NULL DEFAULT \'\'');
+  }
+}
+
 export async function migrateLegacy() {
   if (isPg) return; // fresh schema on Postgres; no legacy data to migrate
   if (!(await tableExists('tracks'))) return; // brand-new DB; schema.js already built it

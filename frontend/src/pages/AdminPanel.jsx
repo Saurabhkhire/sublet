@@ -459,19 +459,27 @@ function MatchingSection({ hid }) {
   );
 }
 
+// Blue-filled button helpers for the speakers admin section
+const spBtn    = { background: 'var(--accent)', color: '#fff', border: 'none', fontWeight: 600, padding: '3px 10px', fontSize: 13, borderRadius: 6, cursor: 'pointer' };
+const spBtnSm  = { ...spBtn, padding: '2px 8px', fontSize: 12 };
+const spBtnRed = { ...spBtnSm, background: '#dc2626' };
+const spBtnGry = { ...spBtnSm, background: '#6b7280' };
+
 function SpeakersSection({ hid }) {
   const base = `/api/hackathons/${hid}/speakers`;
   const [speakers, setSpeakers] = useState([]);
-  const [error, setError] = useState('');
-  // add form
-  const [addName, setAddName] = useState('');
-  const [addTitle, setAddTitle] = useState('');
-  const [addDuration, setAddDuration] = useState('15');
+  const [error, setError]       = useState('');
+
+  // add-form state
+  const EMPTY = { time: '', segment: '', speaker: '', notes: '', duration: '15' };
+  const [add, setAdd]       = useState(EMPTY);
   const [addBusy, setAddBusy] = useState(false);
-  // inline edit
-  const [editing, setEditing] = useState(null); // { id, name, title, duration_minutes }
-  // drag
-  const [dragSrc, setDragSrc] = useState(null);
+
+  // inline edit state
+  const [editing, setEditing] = useState(null);
+
+  // drag state
+  const [dragSrc, setDragSrc]   = useState(null);
   const [dragOver, setDragOver] = useState(null);
 
   async function load() {
@@ -481,25 +489,49 @@ function SpeakersSection({ hid }) {
 
   async function addSpeaker(e) {
     e.preventDefault();
-    if (!addName.trim()) return;
+    if (!add.speaker.trim() && !add.segment.trim()) return;
     setAddBusy(true); setError('');
     try {
-      await post(base, { name: addName.trim(), title: addTitle.trim(), duration_minutes: Number(addDuration) || 15 });
-      setAddName(''); setAddTitle(''); setAddDuration('15');
+      await post(base, {
+        name: add.speaker.trim() || add.segment.trim(),
+        title: add.segment.trim(),
+        scheduled_start: add.time || '',
+        notes: add.notes.trim(),
+        duration_minutes: Math.max(1, Number(add.duration) || 15),
+      });
+      setAdd(EMPTY);
       await load();
     } catch (err) { setError(err.message); } finally { setAddBusy(false); }
   }
 
-  async function saveEdit(sp) {
+  async function saveEdit() {
+    if (!editing) return;
     try {
-      await put(`${base}/${sp.id}`, { name: sp.name, title: sp.title, duration_minutes: Number(sp.duration_minutes) || 15 });
+      await put(`${base}/${editing.id}`, {
+        name: editing.speaker.trim() || editing.segment.trim() || editing.name,
+        title: editing.segment.trim(),
+        scheduled_start: editing.time || '',
+        notes: editing.notes || '',
+        duration_minutes: Math.max(1, Number(editing.duration) || 15),
+      });
       setEditing(null);
       await load();
     } catch (err) { setError(err.message); }
   }
 
+  function startEdit(sp) {
+    setEditing({
+      id: sp.id,
+      time: sp.scheduled_start || '',
+      segment: sp.title || '',
+      speaker: sp.name || '',
+      notes: sp.notes || '',
+      duration: String(sp.duration_minutes || 15),
+    });
+  }
+
   async function deleteSpeaker(id) {
-    if (!confirm('Remove this speaker?')) return;
+    if (!confirm('Remove this item from the schedule?')) return;
     try { await del(`${base}/${id}`); await load(); } catch (err) { setError(err.message); }
   }
 
@@ -508,9 +540,8 @@ function SpeakersSection({ hid }) {
     if (to < 0 || to >= speakers.length) return;
     const list = [...speakers];
     [list[idx], list[to]] = [list[to], list[idx]];
-    const patch = list.map((s, i) => ({ id: s.id, order_index: i }));
     setSpeakers(list);
-    await put(`${base}/reorder`, patch);
+    await put(`${base}/reorder`, list.map((s, i) => ({ id: s.id, order_index: i })));
   }
 
   async function commitDrag(from, to) {
@@ -518,13 +549,12 @@ function SpeakersSection({ hid }) {
     const list = [...speakers];
     const [moved] = list.splice(from, 1);
     list.splice(to, 0, moved);
-    const patch = list.map((s, i) => ({ id: s.id, order_index: i }));
     setSpeakers(list);
-    await put(`${base}/reorder`, patch);
+    await put(`${base}/reorder`, list.map((s, i) => ({ id: s.id, order_index: i })));
   }
 
   async function resetAllScheduled() {
-    if (!confirm('Reset all speaker statuses back to "Scheduled"? This clears live event progress.')) return;
+    if (!confirm('Reset all statuses to Scheduled? This clears live event progress so you can run again.')) return;
     try {
       for (const sp of speakers) {
         if (sp.status !== 'scheduled') {
@@ -535,62 +565,52 @@ function SpeakersSection({ hid }) {
     } catch (err) { setError(err.message); }
   }
 
+  const statusColor = (s) => s === 'speaking' ? 'var(--accent)'
+    : s === 'completed'   ? 'var(--green,#16a34a)'
+    : s === 'rescheduled' ? '#d97706'
+    : s === 'skipped'     ? '#6b7280'
+    : 'transparent';
+
   return (
     <section className="card">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
         <h3 style={{ marginTop: 0, marginBottom: 0 }}>🎤 Speaker Schedule</h3>
         {speakers.some((s) => s.status !== 'scheduled') && (
-          <button className="btn-outline" style={{ fontSize: 12, padding: '3px 10px' }} onClick={resetAllScheduled}>
-            Reset all to Scheduled
-          </button>
+          <button style={spBtn} onClick={resetAllScheduled}>↺ Reset all to Scheduled</button>
         )}
       </div>
       <p className="muted small" style={{ marginTop: 4 }}>
-        Add speakers and set their talk durations. Drag rows or use the arrows to reorder. Go to <strong>Schedule</strong> to run the live event.
+        Build the agenda below — drag rows or use ↑↓ to reorder. Open the <strong>Schedule</strong> tab to run the live event.
       </p>
       {error && <p className="error">{error}</p>}
 
-      {/* Add form */}
-      <form onSubmit={addSpeaker} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-        <input
-          placeholder="Speaker name *"
-          value={addName}
-          onChange={(e) => setAddName(e.target.value)}
-          style={{ flex: '2 1 140px' }}
-          required
-        />
-        <input
-          placeholder="Talk title"
-          value={addTitle}
-          onChange={(e) => setAddTitle(e.target.value)}
-          style={{ flex: '3 1 180px' }}
-        />
-        <input
-          type="number" min={1} max={300}
-          placeholder="Min"
-          value={addDuration}
-          onChange={(e) => setAddDuration(e.target.value)}
-          style={{ width: 70 }}
-        />
-        <button type="submit" disabled={addBusy || !addName.trim()}>
-          {addBusy ? 'Adding…' : '+ Add Speaker'}
+      {/* ── Column headers ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 1fr 60px auto', gap: 6, padding: '4px 10px', marginBottom: 2 }}>
+        {['Time', 'Segment / Topic', 'Speaker', 'What happens', 'Min', ''].map((h) => (
+          <div key={h} className="faint" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.07em' }}>{h}</div>
+        ))}
+      </div>
+
+      {/* ── Add row ── */}
+      <form onSubmit={addSpeaker} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 1fr 60px auto', gap: 6, marginBottom: 12, alignItems: 'center' }}>
+        <input type="time" value={add.time}     onChange={(e) => setAdd({ ...add, time: e.target.value })}     style={{ fontSize: 13, padding: '5px 6px' }} />
+        <input placeholder="Opening remarks…"   value={add.segment}  onChange={(e) => setAdd({ ...add, segment: e.target.value })}  style={{ fontSize: 13 }} />
+        <input placeholder="Alice Smith"        value={add.speaker}  onChange={(e) => setAdd({ ...add, speaker: e.target.value })}  style={{ fontSize: 13 }} />
+        <input placeholder="Keynote talk on AI…" value={add.notes}   onChange={(e) => setAdd({ ...add, notes: e.target.value })}    style={{ fontSize: 13 }} />
+        <input type="number" min={1} max={300}  value={add.duration} onChange={(e) => setAdd({ ...add, duration: e.target.value })} style={{ fontSize: 13, padding: '5px 4px' }} />
+        <button type="submit" style={spBtn} disabled={addBusy || (!add.speaker.trim() && !add.segment.trim())}>
+          {addBusy ? '…' : '+ Add'}
         </button>
       </form>
 
-      {/* Speaker list */}
-      {speakers.length === 0 && (
-        <p className="faint small">No speakers yet. Add one above.</p>
-      )}
+      {/* ── Schedule list ── */}
+      {speakers.length === 0 && <p className="faint small">No items yet. Fill in the row above and click + Add.</p>}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {speakers.map((sp, idx) => {
-          const isEdit = editing?.id === sp.id;
+          const isEdit     = editing?.id === sp.id;
           const isDragging = dragSrc === idx;
           const isDropTarget = dragOver === idx && dragSrc !== null && dragSrc !== idx;
-          const statusColor = sp.status === 'speaking' ? 'var(--accent)'
-            : sp.status === 'completed' ? 'var(--green,#16a34a)'
-            : sp.status === 'missed' ? '#d97706'
-            : sp.status === 'skipped' ? 'var(--muted)'
-            : 'transparent';
 
           return (
             <div
@@ -602,58 +622,60 @@ function SpeakersSection({ hid }) {
               onDragLeave={() => setDragOver(null)}
               onDrop={() => { commitDrag(dragSrc, idx); setDragSrc(null); setDragOver(null); }}
               style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '8px 10px', borderRadius: 6,
+                display: 'grid',
+                gridTemplateColumns: isEdit ? '24px 80px 1fr 1fr 1fr 60px auto' : '24px 80px 1fr 1fr 1fr 60px auto',
+                gap: 6, alignItems: 'center',
+                padding: '7px 10px', borderRadius: 6,
                 border: isDropTarget ? '1.5px dashed var(--accent)' : '1.5px solid var(--border)',
                 background: 'var(--surface-2)',
                 opacity: isDragging ? 0.4 : 1,
                 cursor: isEdit ? 'default' : 'grab',
               }}
             >
-              {/* Drag handle */}
-              <span style={{ color: 'var(--muted)', fontSize: 14, flexShrink: 0, cursor: 'grab' }}>⠿</span>
+              {/* drag handle */}
+              <span style={{ color: 'var(--muted)', fontSize: 13, cursor: 'grab', userSelect: 'none' }}>⠿</span>
 
               {isEdit ? (
                 <>
-                  <input
-                    value={editing.name}
-                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                    style={{ flex: '2 1 120px', padding: '3px 7px', fontSize: 13 }}
-                    placeholder="Name"
-                  />
-                  <input
-                    value={editing.title}
-                    onChange={(e) => setEditing({ ...editing, title: e.target.value })}
-                    style={{ flex: '3 1 160px', padding: '3px 7px', fontSize: 13 }}
-                    placeholder="Talk title"
-                  />
-                  <input
-                    type="number" min={1} max={300}
-                    value={editing.duration_minutes}
-                    onChange={(e) => setEditing({ ...editing, duration_minutes: e.target.value })}
-                    style={{ width: 58, padding: '3px 6px', fontSize: 13 }}
-                  />
-                  <span className="faint small" style={{ flexShrink: 0 }}>min</span>
-                  <button style={{ padding: '3px 10px', fontSize: 13 }} onClick={() => saveEdit(editing)}>Save</button>
-                  <button className="btn-outline" style={{ padding: '3px 8px', fontSize: 13 }} onClick={() => setEditing(null)}>✕</button>
+                  <input type="time" value={editing.time}    onChange={(e) => setEditing({ ...editing, time: e.target.value })}     style={{ fontSize: 12, padding: '3px 4px' }} />
+                  <input value={editing.segment}             onChange={(e) => setEditing({ ...editing, segment: e.target.value })}   style={{ fontSize: 12, padding: '3px 6px' }} placeholder="Segment / Topic" />
+                  <input value={editing.speaker}             onChange={(e) => setEditing({ ...editing, speaker: e.target.value })}   style={{ fontSize: 12, padding: '3px 6px' }} placeholder="Speaker" />
+                  <input value={editing.notes}               onChange={(e) => setEditing({ ...editing, notes: e.target.value })}     style={{ fontSize: 12, padding: '3px 6px' }} placeholder="What happens" />
+                  <input type="number" min={1} max={300} value={editing.duration} onChange={(e) => setEditing({ ...editing, duration: e.target.value })} style={{ fontSize: 12, padding: '3px 4px' }} />
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button style={spBtn} onClick={saveEdit}>Save</button>
+                    <button style={spBtnGry} onClick={() => setEditing(null)}>✕</button>
+                  </div>
                 </>
               ) : (
                 <>
-                  <div style={{ flex: '2 1 120px', minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sp.name}</div>
-                    {sp.title && <div className="faint small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sp.title}</div>}
+                  {/* Time */}
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    {sp.scheduled_start ? sp.scheduled_start : '—'}
                   </div>
-                  <div className="small muted" style={{ flexShrink: 0 }}>{sp.duration_minutes} min</div>
-                  {sp.status !== 'scheduled' && (
-                    <span style={{ fontSize: 12, color: statusColor, flexShrink: 0, fontWeight: 600 }}>
-                      {sp.status.charAt(0).toUpperCase() + sp.status.slice(1)}
-                    </span>
-                  )}
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginLeft: 'auto' }}>
-                    <button className="btn-outline" style={{ padding: '2px 6px', fontSize: 12 }} title="Move up" onClick={() => move(idx, -1)} disabled={idx === 0}>↑</button>
-                    <button className="btn-outline" style={{ padding: '2px 6px', fontSize: 12 }} title="Move down" onClick={() => move(idx, 1)} disabled={idx === speakers.length - 1}>↓</button>
-                    <button className="btn-outline" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setEditing({ id: sp.id, name: sp.name, title: sp.title, duration_minutes: sp.duration_minutes })}>✏</button>
-                    <button className="danger outline" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => deleteSpeaker(sp.id)}>✕</button>
+                  {/* Segment */}
+                  <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                    <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 13 }}>{sp.title || '—'}</div>
+                  </div>
+                  {/* Speaker */}
+                  <div style={{ fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sp.name}</div>
+                  {/* What happens */}
+                  <div style={{ fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sp.notes || '—'}</div>
+                  {/* Duration + status */}
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    {sp.duration_minutes} min
+                    {sp.status !== 'scheduled' && (
+                      <div style={{ fontSize: 11, color: statusColor(sp.status), fontWeight: 600, marginTop: 1 }}>
+                        {sp.status.charAt(0).toUpperCase() + sp.status.slice(1)}
+                      </div>
+                    )}
+                  </div>
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 3 }}>
+                    <button style={spBtnGry} title="Move up"   onClick={() => move(idx, -1)} disabled={idx === 0}>↑</button>
+                    <button style={spBtnGry} title="Move down" onClick={() => move(idx, 1)} disabled={idx === speakers.length - 1}>↓</button>
+                    <button style={spBtnSm}  onClick={() => startEdit(sp)}>✏</button>
+                    <button style={spBtnRed} onClick={() => deleteSpeaker(sp.id)}>✕</button>
                   </div>
                 </>
               )}

@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import { get, put } from '../api.js';
 import { useAuth } from '../auth.jsx';
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── audio ─────────────────────────────────────────────────────────────────────
 
 function playBeep(frequency = 440, duration = 0.35, vol = 0.3) {
   try {
@@ -19,47 +19,74 @@ function playBeep(frequency = 440, duration = 0.35, vol = 0.3) {
     osc.stop(ctx.currentTime + duration + 0.01);
   } catch (_) {}
 }
-
-function play2Min() {
-  playBeep(660, 0.3);
-  setTimeout(() => playBeep(660, 0.3), 400);
-}
+function play2Min() { playBeep(660, 0.3); setTimeout(() => playBeep(660, 0.3), 400); }
 function playTimeUp() {
   playBeep(880, 0.25);
   setTimeout(() => playBeep(440, 0.25), 320);
   setTimeout(() => playBeep(880, 0.25), 640);
 }
 
+// ── helpers ───────────────────────────────────────────────────────────────────
+
 function fmtSecs(secs) {
   const a = Math.abs(Math.round(secs));
-  const m = Math.floor(a / 60);
-  const s = a % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`;
 }
 
-// Given speakers (in order) + an event start string "HH:MM", compute
-// the scheduled start label for each speaker.
+// Format HH:MM → 9:05 AM
+function fmtTime(hhmm) {
+  if (!hhmm) return '';
+  const [hh, mm] = hhmm.split(':').map(Number);
+  if (isNaN(hh)) return hhmm;
+  const period = hh >= 12 ? 'PM' : 'AM';
+  return `${hh % 12 || 12}:${String(mm).padStart(2, '0')} ${period}`;
+}
+
+// Auto-calculate scheduled times from hackathon start time + cumulative durations.
+// If a speaker has a manual scheduled_start set, use that and resync.
 function calcScheduledTimes(speakers, startStr) {
-  if (!startStr) return speakers.map(() => '');
-  const [hh, mm] = startStr.split(':').map(Number);
-  let totalMins = hh * 60 + mm;
+  if (!startStr && speakers.every((s) => !s.scheduled_start)) return speakers.map(() => '');
+  let totalMins = 0;
+  if (startStr) {
+    const [hh, mm] = startStr.split(':').map(Number);
+    totalMins = hh * 60 + mm;
+  }
   return speakers.map((sp) => {
+    if (sp.scheduled_start) {
+      const parts = sp.scheduled_start.split(':');
+      if (parts.length === 2) totalMins = Number(parts[0]) * 60 + Number(parts[1]) + sp.duration_minutes;
+      else totalMins += sp.duration_minutes;
+      return fmtTime(sp.scheduled_start);
+    }
+    if (!startStr) return '';
     const h = Math.floor(totalMins / 60) % 24;
     const m = totalMins % 60;
-    const period = h >= 12 ? 'PM' : 'AM';
-    const h12 = h % 12 || 12;
-    const label = `${h12}:${String(m).padStart(2, '0')} ${period}`;
+    const label = fmtTime(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
     totalMins += sp.duration_minutes;
     return label;
   });
 }
 
-const STATUS_LABEL = {
-  scheduled: '',
-  speaking: '🎤 LIVE',
-  completed: '✅',
-  missed: '⚠ Missed',
-  skipped: '⏭ Skipped',
+// Eligible for speaking: scheduled OR rescheduled (missed speakers get a second chance)
+const isEligible = (s) => s.status === 'scheduled' || s.status === 'rescheduled';
+
+// ── button style ──────────────────────────────────────────────────────────────
+const B     = { background: 'var(--accent)', color: '#fff', border: 'none', fontWeight: 600 };
+const B_RED = { background: '#dc2626',       color: '#fff', border: 'none', fontWeight: 600 };
+const B_AMB = { background: '#d97706',       color: '#fff', border: 'none', fontWeight: 600 };
+const B_GRY = { background: '#6b7280',       color: '#fff', border: 'none', fontWeight: 600 };
+const B_SM  = { ...B,     padding: '5px 14px', fontSize: 13 };
+const B_RED_SM = { ...B_RED, padding: '5px 14px', fontSize: 13 };
+const B_AMB_SM = { ...B_AMB, padding: '5px 14px', fontSize: 13 };
+const B_GRY_SM = { ...B_GRY, padding: '5px 12px', fontSize: 13 };
+
+// ── status display ────────────────────────────────────────────────────────────
+const STATUS = {
+  scheduled:   { label: '',               color: 'var(--muted)' },
+  speaking:    { label: '🎤 LIVE',        color: 'var(--accent)', bold: true },
+  completed:   { label: '✅ Done',        color: 'var(--green,#16a34a)' },
+  rescheduled: { label: '↩ Rescheduled', color: '#d97706' },
+  skipped:     { label: '⏭ Skipped',     color: 'var(--muted)' },
 };
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -69,45 +96,41 @@ export default function Schedule() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
-  const [speakers, setSpeakers] = useState([]);
-  const [isLive, setIsLive] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  // currentId: the id of the speaker currently speaking (null if none)
-  const [currentId, setCurrentId] = useState(null);
-  const [elapsed, setElapsed] = useState(0);   // seconds since current speaker started
+  const [speakers, setSpeakers]     = useState([]);
+  const [isLive, setIsLive]         = useState(false);
+  const [isPaused, setIsPaused]     = useState(false);
+  const [currentId, setCurrentId]   = useState(null);
+  const [elapsed, setElapsed]       = useState(0);
 
-  const timerRef = useRef(null);
-  const alerted2Ref = useRef(false);   // 2-min warning fired this speaker
-  const alertedEndRef = useRef(false); // time-up alert fired this speaker
+  const timerRef    = useRef(null);
+  const alerted2    = useRef(false);
+  const alertedEnd  = useRef(false);
 
-  // ── drag state for admin reorder ─────────────────────────────────────────
-  const [dragSrc, setDragSrc] = useState(null);
+  const [dragSrc, setDragSrc]   = useState(null);
   const [dragOver, setDragOver] = useState(null);
 
   // ── derived ───────────────────────────────────────────────────────────────
-  const current = speakers.find((s) => s.id === currentId) || null;
+  const current    = speakers.find((s) => s.id === currentId) || null;
   const currentIdx = current ? speakers.indexOf(current) : -1;
-  const timeLeft = current ? current.duration_minutes * 60 - elapsed : 0;
+  const timeLeft   = current ? current.duration_minutes * 60 - elapsed : 0;
   const isOvertime = timeLeft < 0;
 
-  const completed = speakers.filter((s) => s.status === 'completed').length;
-  const missed    = speakers.filter((s) => s.status === 'missed').length;
-  const skipped   = speakers.filter((s) => s.status === 'skipped').length;
-  const remaining = speakers.filter((s) => s.status === 'scheduled').length;
-  const total     = speakers.length;
+  const completed    = speakers.filter((s) => s.status === 'completed').length;
+  const rescheduled  = speakers.filter((s) => s.status === 'rescheduled').length;
+  const skipped      = speakers.filter((s) => s.status === 'skipped').length;
+  const remaining    = speakers.filter((s) => isEligible(s)).length;
+  const total        = speakers.length;
 
   const prevSpeaker = speakers.slice(0, currentIdx).filter((s) => s.status === 'completed').slice(-1)[0] || null;
-  const nextSpeaker = speakers.find((s, i) => i > currentIdx && s.status === 'scheduled') || null;
+  const nextSpeaker = speakers.find((s, i) => i > currentIdx && isEligible(s)) || null;
 
   const scheduledTimes = calcScheduledTimes(speakers, meta.hackathon.start_time || '');
+  const timerColor     = isOvertime ? '#dc2626' : timeLeft <= 60 ? '#d97706' : 'inherit';
 
-  const timerColor = isOvertime ? '#dc2626' : timeLeft <= 60 ? '#d97706' : 'inherit';
-
-  // ── load ──────────────────────────────────────────────────────────────────
+  // ── data ──────────────────────────────────────────────────────────────────
   const load = useCallback(() => {
     get(`/api/hackathons/${hid}/speakers`).then(setSpeakers).catch(() => {});
   }, [hid]);
-
   useEffect(() => { load(); }, [load]);
 
   // ── timer ─────────────────────────────────────────────────────────────────
@@ -123,20 +146,14 @@ export default function Schedule() {
   // ── sound alerts ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isLive || !current || isPaused) return;
-    if (!alerted2Ref.current && timeLeft <= 120 && timeLeft > 0) {
-      alerted2Ref.current = true;
-      play2Min();
-    }
-    if (!alertedEndRef.current && timeLeft <= 0) {
-      alertedEndRef.current = true;
-      playTimeUp();
-    }
+    if (!alerted2.current && timeLeft <= 120 && timeLeft > 0) { alerted2.current = true; play2Min(); }
+    if (!alertedEnd.current && timeLeft <= 0)                  { alertedEnd.current = true; playTimeUp(); }
   }, [timeLeft, isLive, current, isPaused]);
 
   // ── actions ───────────────────────────────────────────────────────────────
   async function activateSpeaker(list, id) {
-    alerted2Ref.current = false;
-    alertedEndRef.current = false;
+    alerted2.current  = false;
+    alertedEnd.current = false;
     setCurrentId(id);
     setElapsed(0);
     setIsPaused(false);
@@ -145,12 +162,11 @@ export default function Schedule() {
       status: 'speaking',
       actual_start: new Date().toISOString(),
     });
-    // Optimistic update so UI doesn't wait for a reload
     setSpeakers((prev) => prev.map((s) => s.id === id ? { ...s, status: 'speaking' } : s));
   }
 
   async function startEvent() {
-    const first = speakers.find((s) => s.status === 'scheduled');
+    const first = speakers.find(isEligible);
     if (!first) return;
     setIsLive(true);
     await activateSpeaker(speakers, first.id);
@@ -158,14 +174,32 @@ export default function Schedule() {
 
   async function stopEvent() {
     stopTimer();
+    // If there's a current speaker mid-talk, leave their status as-is (don't mark them done)
     setIsLive(false);
     setCurrentId(null);
   }
 
-  function pause() { setIsPaused(true); stopTimer(); }
+  async function restartEvent() {
+    if (!confirm('Reset all speakers back to Scheduled? This clears live event progress so you can run the event again.')) return;
+    stopTimer();
+    setIsLive(false);
+    setCurrentId(null);
+    setElapsed(0);
+    for (const sp of speakers) {
+      if (sp.status !== 'scheduled') {
+        await put(`/api/hackathons/${hid}/speakers/${sp.id}`, {
+          status: 'scheduled',
+          actual_start: '',
+          actual_end: '',
+        });
+      }
+    }
+    load();
+  }
+
+  function pause()  { setIsPaused(true);  stopTimer(); }
   function resume() { setIsPaused(false); startTimer(); }
 
-  // Finish current speaker with the given status, then move to next scheduled.
   async function finishAndAdvance(status) {
     stopTimer();
     if (!current) return;
@@ -174,9 +208,7 @@ export default function Schedule() {
       actual_end: new Date().toISOString(),
     });
     setSpeakers((prev) => prev.map((s) => s.id === current.id ? { ...s, status } : s));
-
-    // Find next scheduled (after current in order)
-    const nextIdx = speakers.findIndex((s, i) => i > currentIdx && s.status === 'scheduled');
+    const nextIdx = speakers.findIndex((s, i) => i > currentIdx && isEligible(s));
     if (nextIdx >= 0) {
       await activateSpeaker(speakers, speakers[nextIdx].id);
     } else {
@@ -186,20 +218,18 @@ export default function Schedule() {
   }
 
   async function missSpeaker() {
-    // Mark as missed, bump to end of list, reload, continue.
+    // Mark as 'rescheduled' and move to end — they get another turn when the queue reaches them
     stopTimer();
     if (!current) return;
     const maxOrder = speakers.reduce((m, s) => Math.max(m, s.order_index), 0);
     await put(`/api/hackathons/${hid}/speakers/${current.id}`, {
-      status: 'missed',
-      actual_end: new Date().toISOString(),
+      status: 'rescheduled',
+      actual_end: '',
       order_index: maxOrder + 1,
     });
     const fresh = await get(`/api/hackathons/${hid}/speakers`);
     setSpeakers(fresh);
-    // After reload, find next scheduled from the same position (currentIdx)
-    // but fresh list may have shifted, so find by position
-    const nextSp = fresh.find((s, i) => i >= currentIdx && s.status === 'scheduled');
+    const nextSp = fresh.find((s, i) => i >= currentIdx && isEligible(s) && s.id !== current.id);
     if (nextSp) {
       await activateSpeaker(fresh, nextSp.id);
     } else {
@@ -208,57 +238,52 @@ export default function Schedule() {
     }
   }
 
-  function addTime(mins) {
-    setElapsed((e) => Math.max(0, e - mins * 60));
-  }
+  function addTime(mins) { setElapsed((e) => Math.max(0, e - mins * 60)); }
 
-  // ── drag-and-drop reorder (admin, non-live) ───────────────────────────────
   async function commitReorder(fromIdx, toIdx) {
     if (fromIdx === toIdx) return;
     const list = [...speakers];
     const [moved] = list.splice(fromIdx, 1);
     list.splice(toIdx, 0, moved);
-    const patch = list.map((s, i) => ({ id: s.id, order_index: i }));
     setSpeakers(list);
-    await put(`/api/hackathons/${hid}/speakers/reorder`, patch);
+    await put(`/api/hackathons/${hid}/speakers/reorder`, list.map((s, i) => ({ id: s.id, order_index: i })));
   }
 
   // ── render ────────────────────────────────────────────────────────────────
+  const canStart   = isAdmin && !isLive && speakers.some(isEligible);
+  const canRestart = isAdmin && !isLive && speakers.length > 0 && speakers.some((s) => s.status !== 'scheduled');
+
   return (
     <div className="stack">
-      {/* Header */}
+
+      {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h1 style={{ margin: 0 }}>🎤 Speaker Schedule</h1>
           <p className="muted" style={{ marginTop: 4, marginBottom: 0 }}>{meta.hackathon.name}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {isLive && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 20, background: '#dc2626', color: '#fff', fontWeight: 700, fontSize: 13 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 20, background: '#dc2626', color: '#fff', fontWeight: 700, fontSize: 13 }}>
               ● LIVE
             </span>
           )}
-          {isAdmin && !isLive && speakers.some((s) => s.status === 'scheduled') && (
-            <button onClick={startEvent} style={{ background: 'var(--accent)', color: '#fff' }}>
-              ▶ Start Event
-            </button>
-          )}
+          {canStart    && <button style={B} onClick={startEvent}>▶ Start Event</button>}
+          {canRestart  && <button style={B_GRY} onClick={restartEvent}>↺ Run Again</button>}
           {isAdmin && isLive && (
-            <button className="btn-outline" onClick={stopEvent} style={{ color: '#dc2626', borderColor: '#dc2626' }}>
-              ■ End Event
-            </button>
+            <button style={B_RED} onClick={stopEvent}>■ End Event</button>
           )}
         </div>
       </div>
 
-      {/* Dashboard stats */}
+      {/* ── Stats dashboard ── */}
       <div className="card">
         <div className="stat-row">
           <div className="stat"><div className="n">{total}</div><div className="l">Total</div></div>
           <div className="stat"><div className="n" style={{ color: 'var(--green,#16a34a)' }}>{completed}</div><div className="l">Done</div></div>
           <div className="stat"><div className="n">{remaining}</div><div className="l">Remaining</div></div>
-          <div className="stat"><div className="n" style={{ color: '#d97706' }}>{missed}</div><div className="l">Missed</div></div>
-          <div className="stat"><div className="n" style={{ color: 'var(--muted)' }}>{skipped}</div><div className="l">Skipped</div></div>
+          <div className="stat"><div className="n" style={{ color: '#d97706' }}>{rescheduled}</div><div className="l">Rescheduled</div></div>
+          <div className="stat"><div className="n" style={{ color: '#6b7280' }}>{skipped}</div><div className="l">Skipped</div></div>
         </div>
         {(prevSpeaker || current || nextSpeaker) && (
           <div style={{ borderTop: '1px solid var(--border)', marginTop: 14, paddingTop: 14, display: 'flex', gap: 28, flexWrap: 'wrap' }}>
@@ -271,7 +296,9 @@ export default function Schedule() {
             {current && (
               <div>
                 <div className="faint" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.07em' }}>Now speaking</div>
-                <div style={{ fontWeight: 700 }}>{current.name}{current.title ? <span className="muted" style={{ fontWeight: 400 }}> · {current.title}</span> : ''}</div>
+                <div style={{ fontWeight: 700 }}>{current.name}
+                  {current.title && <span className="muted" style={{ fontWeight: 400 }}> · {current.title}</span>}
+                </div>
               </div>
             )}
             {nextSpeaker && (
@@ -290,72 +317,64 @@ export default function Schedule() {
         )}
       </div>
 
-      {/* Live timer + controls */}
+      {/* ── Live timer + controls ── */}
       {isLive && current && (
         <div className="card" style={{ textAlign: 'center', padding: '32px 24px' }}>
           <div className="faint" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: 6 }}>
             Now speaking
           </div>
           <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 2 }}>{current.name}</div>
-          {current.title && <div className="muted small" style={{ marginBottom: 20 }}>{current.title}</div>}
+          {current.title && <div className="muted small" style={{ marginBottom: 4 }}>{current.title}</div>}
+          {current.notes && <div className="faint small" style={{ marginBottom: 18 }}>{current.notes}</div>}
 
           {/* Big timer */}
           <div style={{
             fontSize: 80, fontWeight: 900, lineHeight: 1, letterSpacing: '-2px',
-            fontVariantNumeric: 'tabular-nums', color: timerColor, marginBottom: 6,
+            fontVariantNumeric: 'tabular-nums', color: timerColor, marginBottom: 6, marginTop: current.notes ? 0 : 18,
           }}>
             {isOvertime ? '+' : ''}{fmtSecs(Math.abs(timeLeft))}
           </div>
           <div className="faint small" style={{ marginBottom: 28 }}>
-            {isOvertime
-              ? `${fmtSecs(Math.abs(timeLeft))} overtime`
-              : `of ${current.duration_minutes} min`}
+            {isOvertime ? `${fmtSecs(Math.abs(timeLeft))} overtime` : `of ${current.duration_minutes} min`}
           </div>
 
-          {/* Pause / Resume / End Early / Next */}
+          {/* Primary controls */}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
             {isPaused
-              ? <button onClick={resume}>▶ Resume</button>
-              : <button onClick={pause}>⏸ Pause</button>
+              ? <button style={B} onClick={resume}>▶ Resume</button>
+              : <button style={B} onClick={pause}>⏸ Pause</button>
             }
-            <button className="btn-outline" onClick={() => finishAndAdvance('completed')}>✅ End Early</button>
-            <button className="btn-outline" onClick={() => finishAndAdvance('completed')}>⏭ Next Speaker</button>
+            <button style={B} onClick={() => finishAndAdvance('completed')}>✅ End Early</button>
+            <button style={B} onClick={() => finishAndAdvance('completed')}>⏭ Next Speaker</button>
           </div>
 
           {/* Add time */}
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
             <span className="faint small">Add time:</span>
             {[1, 2, 5].map((m) => (
-              <button key={m} className="btn-outline" style={{ padding: '4px 10px', fontSize: 13 }} onClick={() => addTime(m)}>
-                +{m} min
-              </button>
+              <button key={m} style={B_SM} onClick={() => addTime(m)}>+{m} min</button>
             ))}
           </div>
 
           {/* Miss / Skip */}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              className="btn-outline"
-              style={{ borderColor: '#d97706', color: '#d97706', padding: '5px 14px', fontSize: 13 }}
-              onClick={missSpeaker}
-            >
-              ⚠ Miss Speaker
+            <button style={B_AMB_SM} onClick={missSpeaker}>
+              ↩ Miss — Reschedule to Later
             </button>
-            <button
-              className="btn-outline"
-              style={{ borderColor: 'var(--muted)', color: 'var(--muted)', padding: '5px 14px', fontSize: 13 }}
-              onClick={() => finishAndAdvance('skipped')}
-            >
-              ⏭ Skip Speaker
+            <button style={B_GRY_SM} onClick={() => finishAndAdvance('skipped')}>
+              ⏭ Skip Permanently
             </button>
+          </div>
+          <div className="faint" style={{ fontSize: 11, marginTop: 8 }}>
+            Miss = speaker gets another slot at the end · Skip = removed from today's run
           </div>
         </div>
       )}
 
-      {/* Timeline */}
+      {/* ── Timeline ── */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 14 }}>
-          <h3 style={{ margin: 0 }}>Timeline</h3>
+          <h3 style={{ margin: 0 }}>Schedule</h3>
           {isAdmin && !isLive && speakers.length > 1 && (
             <span className="faint small">Drag rows to reorder</span>
           )}
@@ -363,15 +382,16 @@ export default function Schedule() {
 
         {speakers.length === 0 && (
           <p className="faint small" style={{ margin: 0 }}>
-            No speakers yet. Admins can add speakers in the Admin panel.
+            No agenda items yet — an admin can add them in the Admin panel.
           </p>
         )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {speakers.map((sp, idx) => {
-            const isCurrent = sp.id === currentId;
+            const isCurrent  = sp.id === currentId;
             const isDragging = dragSrc === idx;
             const isDropTarget = dragOver === idx && dragSrc !== null && dragSrc !== idx;
+            const st = STATUS[sp.status] || STATUS.scheduled;
             return (
               <div
                 key={sp.id}
@@ -383,12 +403,10 @@ export default function Schedule() {
                 onDrop={() => { commitReorder(dragSrc, idx); setDragSrc(null); setDragOver(null); }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '9px 12px', borderRadius: 7,
-                  border: isCurrent
-                    ? '1.5px solid var(--accent)'
-                    : isDropTarget
-                    ? '1.5px dashed var(--accent)'
-                    : '1.5px solid transparent',
+                  padding: '10px 12px', borderRadius: 7,
+                  border: isCurrent     ? '1.5px solid var(--accent)'
+                        : isDropTarget  ? '1.5px dashed var(--accent)'
+                        :                 '1.5px solid transparent',
                   background: isCurrent ? 'var(--surface-2)' : 'transparent',
                   opacity: (sp.status === 'skipped' || isDragging) ? 0.4 : 1,
                   cursor: isAdmin && !isLive ? 'grab' : 'default',
@@ -396,37 +414,29 @@ export default function Schedule() {
                 }}
               >
                 {/* Time */}
-                <div style={{ width: 64, fontSize: 13, color: 'var(--muted)', flexShrink: 0 }}>
+                <div style={{ width: 68, fontSize: 13, color: 'var(--muted)', flexShrink: 0 }}>
                   {scheduledTimes[idx] || '—'}
                 </div>
 
-                {/* Speaker info */}
+                {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: isCurrent ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {sp.name}
+                  <div style={{ fontWeight: isCurrent ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {sp.title || sp.name}
                   </div>
-                  {sp.title && (
-                    <div className="faint small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {sp.title}
-                    </div>
-                  )}
+                  <div className="faint small" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {sp.title ? sp.name : ''}{sp.notes ? (sp.title ? ' · ' : '') + sp.notes : ''}
+                  </div>
                 </div>
 
                 {/* Duration */}
-                <div style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>
-                  {sp.duration_minutes} min
-                </div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>{sp.duration_minutes} min</div>
 
-                {/* Status badge */}
-                <div style={{ fontSize: 13, flexShrink: 0, minWidth: 70, textAlign: 'right',
-                  color: sp.status === 'speaking' ? 'var(--accent)'
-                    : sp.status === 'completed' ? 'var(--green,#16a34a)'
-                    : sp.status === 'missed' ? '#d97706'
-                    : 'var(--muted)',
-                  fontWeight: sp.status === 'speaking' ? 700 : 400,
-                }}>
-                  {STATUS_LABEL[sp.status] || ''}
-                </div>
+                {/* Status */}
+                {st.label && (
+                  <div style={{ fontSize: 13, color: st.color, fontWeight: st.bold ? 700 : 400, flexShrink: 0, minWidth: 80, textAlign: 'right' }}>
+                    {st.label}
+                  </div>
+                )}
               </div>
             );
           })}

@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
 
 // Create a speaker (admin only).
 router.post('/', adminOnly, async (req, res) => {
-  const { name, title, duration_minutes, scheduled_start } = req.body || {};
+  const { name, title, duration_minutes, scheduled_start, notes } = req.body || {};
   if (!name || !String(name).trim()) {
     return res.status(400).json({ error: 'Speaker name is required' });
   }
@@ -35,6 +35,7 @@ router.post('/', adminOnly, async (req, res) => {
     scheduled_start: scheduled_start || '',
     actual_start: '',
     actual_end: '',
+    notes: notes || '',
     created_at: new Date().toISOString(),
   });
   res.status(201).json(await get('SELECT * FROM speakers WHERE id = ?', [id]));
@@ -59,11 +60,11 @@ router.put('/reorder', adminOnly, async (req, res) => {
 router.put('/:id', adminOnly, async (req, res) => {
   const sp = await get('SELECT * FROM speakers WHERE id = ? AND hackathon_id = ?', [req.params.id, req.hackathonId]);
   if (!sp) return res.status(404).json({ error: 'Speaker not found' });
-  const { name, title, duration_minutes, status, scheduled_start, actual_start, actual_end, order_index } = req.body || {};
+  const { name, title, duration_minutes, status, scheduled_start, actual_start, actual_end, order_index, notes } = req.body || {};
   await run(
     `UPDATE speakers SET
        name = ?, title = ?, duration_minutes = ?, status = ?,
-       scheduled_start = ?, actual_start = ?, actual_end = ?, order_index = ?
+       scheduled_start = ?, actual_start = ?, actual_end = ?, order_index = ?, notes = ?
      WHERE id = ?`,
     [
       name !== undefined ? String(name).trim() || sp.name : sp.name,
@@ -74,6 +75,7 @@ router.put('/:id', adminOnly, async (req, res) => {
       actual_start !== undefined ? actual_start : sp.actual_start,
       actual_end !== undefined ? actual_end : sp.actual_end,
       order_index !== undefined ? Number(order_index) : sp.order_index,
+      notes !== undefined ? notes : (sp.notes || ''),
       sp.id,
     ]
   );
