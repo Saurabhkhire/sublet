@@ -698,9 +698,12 @@ function SpeakersSection({ hid }) {
   );
 }
 
-// ── Judge Assignment (config + quick summary; full view on /judging-groups) ──────────────
+// ── Judge Assignment (config + attendance; full group map on /judging-groups) ─────────────
 
-function JudgeAssignmentSection({ hid, meta }) {
+const JA_GC = { A: '#ef4444', B: '#3b82f6', C: '#22c55e', D: '#f59e0b', E: '#a855f7', F: '#06b6d4', G: '#ec4899', H: '#84cc16' };
+const jagc = (g) => JA_GC[g] || '#6b7280';
+
+function JudgeAssignmentSection({ hid }) {
   const base = `/api/hackathons/${hid}/judging-groups`;
   const [data, setData] = useState(null);
   const [params, setParams] = useState({ judge_time_minutes: 60, per_project_minutes: 5 });
@@ -737,6 +740,18 @@ function JudgeAssignmentSection({ hid, meta }) {
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
 
+  async function toggleAttend(j) {
+    setBusy(true); setError('');
+    try {
+      if (j.judge_group) {
+        await del(`${base}/attend/${j.user_id}`);
+      } else {
+        await post(`${base}/attend/${j.user_id}`);
+      }
+      await load();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+
   const ppg = data?.projects_per_group || 0;
   const need = data?.group_count_needed || 0;
   const assigned = data?.config?.assigned_at;
@@ -747,9 +762,10 @@ function JudgeAssignmentSection({ hid, meta }) {
     <section className="card">
       <h3 style={{ marginTop: 0, marginBottom: 4 }}>⚖️ Judge Assignment</h3>
       <p className="muted small" style={{ marginTop: 0, marginBottom: 12 }}>
-        Configure how projects are split into judging groups. Judges mark their own attendance on the <strong>Judging Groups</strong> page.
+        Set judging parameters, assign groups, and track judge attendance here.
       </p>
       {error && <p className="error">{error}</p>}
+
       <form onSubmit={saveParams}>
         <div className="row" style={{ gap: 16, flexWrap: 'wrap' }}>
           <label style={{ flex: 1, minWidth: 140 }}>
@@ -779,9 +795,40 @@ function JudgeAssignmentSection({ hid, meta }) {
       {assigned && (
         <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--surface-2)', borderRadius: 6 }}>
           <span style={{ color: 'var(--green,#16a34a)', fontSize: 13 }}>✓ Groups assigned</span>
-          <span className="muted small"> · {groupKeys.length} group(s) · {data?.all_judges?.filter((j) => j.judge_group).length || 0} judge(s) checked in</span>
+          <span className="muted small"> · {groupKeys.length} group(s) · {data?.all_judges?.filter((j) => j.judge_group).length || 0} / {data?.all_judges?.length || 0} judges checked in</span>
         </div>
       )}
+
+      {/* ── Judge attendance list ── */}
+      <div style={{ marginTop: 18 }}>
+        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Judge Attendance</div>
+        {!assigned && <p className="muted small" style={{ marginTop: 0, marginBottom: 8 }}>Assign groups first to enable attendance check-in.</p>}
+        {(data?.all_judges || []).length === 0
+          ? <p className="faint small">No judges added yet — add them in the Judges section above.</p>
+          : (
+            <div className="stack" style={{ gap: 5 }}>
+              {(data.all_judges).map((j) => (
+                <label key={j.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 7, cursor: assigned ? 'pointer' : 'default', margin: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!j.judge_group}
+                    disabled={busy || !assigned}
+                    onChange={() => toggleAttend(j)}
+                    style={{ width: 17, height: 17, flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {j.name && j.name !== j.email
+                      ? <><div style={{ fontWeight: 500, fontSize: 13 }}>{j.name}</div><div className="small muted">{j.email}</div></>
+                      : <div style={{ fontSize: 13 }}>{j.email}</div>}
+                  </div>
+                  {j.judge_group
+                    ? <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 5, background: jagc(j.judge_group), color: '#fff', fontWeight: 700, flexShrink: 0 }}>Group {j.judge_group}</span>
+                    : <span className="badge" style={{ fontSize: 11, flexShrink: 0 }}>not checked in</span>}
+                </label>
+              ))}
+            </div>
+          )}
+      </div>
     </section>
   );
 }

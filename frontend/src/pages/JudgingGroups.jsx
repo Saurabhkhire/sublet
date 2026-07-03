@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
-import { get, post, put, del } from '../api.js';
+import { get, post, del } from '../api.js';
 import { useAuth } from '../auth.jsx';
 
 const GROUP_COLORS = { A: '#ef4444', B: '#3b82f6', C: '#22c55e', D: '#f59e0b', E: '#a855f7', F: '#06b6d4', G: '#ec4899', H: '#84cc16' };
@@ -9,6 +9,7 @@ const gc = (g) => GROUP_COLORS[g] || '#6b7280';
 function fmtTime(h, m) {
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }
+
 function groupWindow(g, startStr, judgeTimeMins) {
   if (!startStr || !judgeTimeMins) return null;
   const [hh, mm] = startStr.split(':').map(Number);
@@ -18,6 +19,35 @@ function groupWindow(g, startStr, judgeTimeMins) {
   return `${fmtTime(Math.floor(startMins / 60) % 24, startMins % 60)} – ${fmtTime(Math.floor(endMins / 60) % 24, endMins % 60)}`;
 }
 
+function projectSlotTime(g, posInGroup, startStr, judgeTimeMins, perProjectMins) {
+  if (!startStr || !judgeTimeMins || !perProjectMins) return null;
+  const [hh, mm] = startStr.split(':').map(Number);
+  const idx = g.charCodeAt(0) - 65;
+  const groupStart = hh * 60 + mm + idx * judgeTimeMins;
+  const slotStart = groupStart + posInGroup * perProjectMins;
+  const slotEnd = slotStart + perProjectMins;
+  return `${fmtTime(Math.floor(slotStart / 60) % 24, slotStart % 60)} – ${fmtTime(Math.floor(slotEnd / 60) % 24, slotEnd % 60)}`;
+}
+
+function fmtActual(iso) {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch { return null; }
+}
+
+function computeDemoTimes(slots, startTimeStr) {
+  if (!startTimeStr) return slots.map((s) => ({ ...s, estStart: fmtActual(s.actual_start), estEnd: fmtActual(s.actual_end) }));
+  const [hh, mm] = startTimeStr.split(':').map(Number);
+  let cursor = hh * 60 + mm;
+  return slots.map((s) => {
+    const sStart = fmtActual(s.actual_start) || fmtTime(Math.floor(cursor / 60) % 24, cursor % 60);
+    const eEnd = fmtActual(s.actual_end) || fmtTime(Math.floor((cursor + (s.duration_minutes || 10)) / 60) % 24, (cursor + (s.duration_minutes || 10)) % 60);
+    cursor += (s.duration_minutes || 10) + (s.break_after_minutes || 0);
+    return { ...s, estStart: sStart, estEnd: eEnd };
+  });
+}
+
 export default function JudgingGroups() {
   const { meta, hid } = useOutletContext();
   const { user } = useAuth();
@@ -25,41 +55,22 @@ export default function JudgingGroups() {
   const isJudge = meta.is_judge;
 
   const [data, setData] = useState(null);
-  const [params, setParams] = useState({ judge_time_minutes: 60, per_project_minutes: 5 });
-  const [msg, setMsg] = useState('');
+  const [demoSlots, setDemoSlots] = useState([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
 
   async function load() {
     try {
       const d = await get(`/api/hackathons/${hid}/judging-groups`);
       setData(d);
-      if (d.config && d.config.judge_time_minutes) {
-        setParams({ judge_time_minutes: d.config.judge_time_minutes, per_project_minutes: d.config.per_project_minutes });
-      }
     } catch (e) { setError(e.message); }
+    try {
+      const slots = await get(`/api/hackathons/${hid}/demo-slots`);
+      setDemoSlots(slots);
+    } catch (_) {}
   }
   useEffect(() => { load(); }, [hid]);
-
-  async function saveParams(e) {
-    e.preventDefault();
-    setBusy(true); setMsg(''); setError('');
-    try {
-      await put(`/api/hackathons/${hid}/judging-groups/config`, params);
-      setMsg('Saved!'); setTimeout(() => setMsg(''), 2000);
-      await load();
-    } catch (e) { setError(e.message); } finally { setBusy(false); }
-  }
-
-  async function assign() {
-    if (!confirm('Assign all projects to judging groups? Existing group assignments will be overwritten.')) return;
-    setBusy(true); setMsg(''); setError('');
-    try {
-      const r = await post(`/api/hackathons/${hid}/judging-groups/assign`);
-      setMsg(`Assigned ${r.projects_assigned} project(s) into ${r.group_count} group(s).`);
-      await load();
-    } catch (e) { setError(e.message); } finally { setBusy(false); }
-  }
 
   async function attend() {
     setBusy(true); setMsg(''); setError('');
@@ -70,28 +81,28 @@ export default function JudgingGroups() {
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
 
-  async function adminMarkAttend(uid) {
-    setBusy(true); setError('');
-    try { await post(`/api/hackathons/${hid}/judging-groups/attend/${uid}`); await load(); }
-    catch (e) { setError(e.message); } finally { setBusy(false); }
-  }
-
-  async function adminClearAttend(uid) {
-    setBusy(true); setError('');
-    try { await del(`/api/hackathons/${hid}/judging-groups/attend/${uid}`); await load(); }
-    catch (e) { setError(e.message); } finally { setBusy(false); }
-  }
-
   if (!data) return <div className="page muted">Loading…</div>;
 
   const groups = data.groups || {};
   const groupKeys = Object.keys(groups).sort();
   const assigned = data.config?.assigned_at;
   const jt = data.config?.judge_time_minutes;
+  const pp = data.config?.per_project_minutes;
   const startStr = meta.hackathon?.start_time;
-  const ppg = data.projects_per_group;
 
-  const totalProjectCount = groupKeys.reduce((a, k) => a + groups[k].projects.length, 0) + (data.unassigned_projects || 0);
+  const timedSlots = computeDemoTimes(demoSlots, startStr);
+
+  // Group demo slots by the project's judge_group
+  const demoByGroup = {};
+  for (const s of timedSlots) {
+    const grp = s.project_judge_group || s.judge_group || '_none';
+    if (!demoByGroup[grp]) demoByGroup[grp] = [];
+    demoByGroup[grp].push(s);
+  }
+
+  // Participant's demo slot
+  const myProject = data.my_project;
+  const myDemoSlot = myProject ? timedSlots.find((s) => s.project_id === myProject.id) : null;
 
   return (
     <div className="stack">
@@ -100,16 +111,16 @@ export default function JudgingGroups() {
       {msg && <p className="success">{msg}</p>}
 
       {/* ── My project card (for participants) ── */}
-      {data.my_project && (
-        <div className="card" style={{ borderLeft: `4px solid ${data.my_project.judge_group ? gc(data.my_project.judge_group) : 'var(--border)'}` }}>
+      {myProject && (
+        <div className="card" style={{ borderLeft: `4px solid ${myProject.judge_group ? gc(myProject.judge_group) : 'var(--border)'}` }}>
           <div className="small faint" style={{ textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Your Project</div>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>{data.my_project.name}</div>
-          {data.my_project.judge_group ? (
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>{myProject.name}</div>
+          {myProject.judge_group ? (
             <div>
               <span>Assigned to </span>
-              <strong style={{ color: gc(data.my_project.judge_group), fontSize: 16 }}>Group {data.my_project.judge_group}</strong>
-              {groupWindow(data.my_project.judge_group, startStr, jt) && (
-                <span className="muted"> · {groupWindow(data.my_project.judge_group, startStr, jt)}</span>
+              <strong style={{ color: gc(myProject.judge_group), fontSize: 16 }}>Group {myProject.judge_group}</strong>
+              {groupWindow(myProject.judge_group, startStr, jt) && (
+                <span className="muted"> · {groupWindow(myProject.judge_group, startStr, jt)}</span>
               )}
             </div>
           ) : (
@@ -118,7 +129,7 @@ export default function JudgingGroups() {
         </div>
       )}
 
-      {/* ── Judge: attendance + group ── */}
+      {/* ── Judge: self-attend button + group info ── */}
       {isJudge && !isAdmin && (
         <div className="card">
           <div className="small faint" style={{ textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Your Judge Assignment</div>
@@ -133,11 +144,13 @@ export default function JudgingGroups() {
               {groups[data.my_judge_group] && (
                 <div className="stack" style={{ gap: 6 }}>
                   <div className="small faint">Projects to review ({groups[data.my_judge_group].projects.length}):</div>
-                  {groups[data.my_judge_group].projects.map((p) => (
+                  {groups[data.my_judge_group].projects.map((p, idx) => (
                     <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--surface-2)', borderRadius: 6 }}>
                       <div>
                         <div style={{ fontWeight: 500 }}>{p.name}</div>
-                        {p.team_emails && <div className="small muted">{p.team_emails.split(',').join(', ')}</div>}
+                        {pp && startStr && (
+                          <div className="small muted">{projectSlotTime(data.my_judge_group, idx, startStr, jt, pp)}</div>
+                        )}
                       </div>
                       <Link to={`/h/${hid}/judging`}>
                         <button style={{ fontSize: 12, padding: '4px 12px' }}>Judge ↗</button>
@@ -160,88 +173,70 @@ export default function JudgingGroups() {
         </div>
       )}
 
-      {/* ── Admin config + assignment ── */}
-      {isAdmin && (
-        <>
-          <div className="card">
-            <h3 style={{ marginTop: 0, marginBottom: 12 }}>⚙ Judging Parameters</h3>
-            <form onSubmit={saveParams}>
-              <div className="row" style={{ gap: 16, flexWrap: 'wrap' }}>
-                <label style={{ flex: 1, minWidth: 150 }}>
-                  Total judge time (min)
-                  <input type="number" min={1} max={480} value={params.judge_time_minutes}
-                    onChange={(e) => setParams({ ...params, judge_time_minutes: Number(e.target.value) })} />
-                </label>
-                <label style={{ flex: 1, minWidth: 150 }}>
-                  Time per project (min)
-                  <input type="number" min={1} max={120} value={params.per_project_minutes}
-                    onChange={(e) => setParams({ ...params, per_project_minutes: Number(e.target.value) })} />
-                </label>
-              </div>
-              {ppg > 0 && (
-                <div className="muted small" style={{ marginTop: 8, padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 6 }}>
-                  → <strong>{ppg}</strong> project(s) per group · <strong>{data.group_count_needed}</strong> groups needed for <strong>{totalProjectCount}</strong> projects
-                </div>
-              )}
-              <div className="row" style={{ gap: 10, marginTop: 12 }}>
-                <button type="submit" disabled={busy}>Save</button>
-                <button type="button" className="outline" onClick={assign} disabled={busy}>
-                  {assigned ? '↺ Re-assign Groups' : '▶ Assign Groups Now'}
-                </button>
-                {msg && <span className="success small">{msg}</span>}
-              </div>
-            </form>
-            {assigned && (
-              <p className="small" style={{ marginTop: 8, color: 'var(--green,#16a34a)' }}>
-                ✓ Last assigned {new Date(assigned).toLocaleString()}
-              </p>
-            )}
-          </div>
+      {/* ── Demo Schedule (visible to all once slots exist) ── */}
+      {timedSlots.length > 0 && (
+        <div className="card">
+          <h3 style={{ marginTop: 0, marginBottom: 4 }}>🎬 Demo Day Schedule</h3>
 
-          {/* Judge attendance table */}
-          <div className="card">
-            <h3 style={{ marginTop: 0, marginBottom: 10 }}>👩‍⚖️ Judge Attendance</h3>
-            <p className="muted small" style={{ marginBottom: 10 }}>
-              Judges can check in themselves from this page. You can also mark or clear on their behalf.
-            </p>
-            {(data.all_judges || []).length === 0 ? (
-              <p className="faint small">No judges added yet.</p>
-            ) : (
-              <table>
-                <thead>
-                  <tr><th>Judge</th><th>Group</th><th>Checked in</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {(data.all_judges || []).map((j) => (
-                    <tr key={j.user_id}>
-                      <td className="small">{j.email}</td>
-                      <td>
-                        {j.judge_group
-                          ? <span className="badge" style={{ background: gc(j.judge_group), color: '#fff' }}>Group {j.judge_group}</span>
-                          : <span className="badge">—</span>}
-                      </td>
-                      <td className="small muted">
-                        {j.attended_at ? new Date(j.attended_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
-                      </td>
-                      <td>
-                        {j.judge_group ? (
-                          <button className="outline" style={{ fontSize: 12, padding: '2px 8px' }} disabled={busy}
-                            onClick={() => adminClearAttend(j.user_id)}>Clear</button>
-                        ) : (
-                          <button style={{ fontSize: 12, padding: '2px 8px' }} disabled={busy || !assigned}
-                            onClick={() => adminMarkAttend(j.user_id)}>Mark In</button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </>
+          {/* My project banner */}
+          {myDemoSlot && (
+            <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 8, background: gc(myProject?.judge_group || 'A') + '22', border: `1.5px solid ${gc(myProject?.judge_group || 'A')}` }}>
+              <span style={{ fontWeight: 600 }}>Your project</span>
+              {' '}presents at{' '}
+              <strong>{myDemoSlot.estStart}</strong>
+              {myDemoSlot.estEnd && <> – <strong>{myDemoSlot.estEnd}</strong></>}
+              {myProject?.judge_group && (
+                <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 4, background: gc(myProject.judge_group), color: '#fff', fontSize: 12, fontWeight: 700 }}>
+                  Group {myProject.judge_group}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* All slots grouped by judge_group */}
+          {groupKeys.filter((g) => (demoByGroup[g] || []).length > 0).map((g) => (
+            <div key={g} style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontWeight: 700, fontSize: 15, color: gc(g) }}>Group {g}</span>
+                {groupWindow(g, startStr, jt) && <span className="muted small">{groupWindow(g, startStr, jt)}</span>}
+              </div>
+              <div className="stack" style={{ gap: 4 }}>
+                {(demoByGroup[g] || []).map((s) => {
+                  const isMe = myProject && s.project_id === myProject.id;
+                  return (
+                    <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', borderRadius: 6, background: isMe ? gc(g) + '22' : 'var(--surface-2)', border: isMe ? `1.5px solid ${gc(g)}` : '1.5px solid transparent', fontWeight: isMe ? 600 : 400 }}>
+                      <div style={{ fontSize: 13 }}>
+                        {s.custom_name || s.project_name || 'Demo'}
+                        {isMe && <span style={{ marginLeft: 8, fontSize: 11, color: gc(g) }}>← yours</span>}
+                      </div>
+                      <div className="small muted" style={{ flexShrink: 0, marginLeft: 12 }}>
+                        {s.estStart}{s.estEnd ? ` – ${s.estEnd}` : ''}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {/* Slots not linked to any group */}
+          {(demoByGroup['_none'] || []).length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--muted)', marginBottom: 6 }}>Other Slots</div>
+              <div className="stack" style={{ gap: 4 }}>
+                {demoByGroup['_none'].map((s) => (
+                  <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', borderRadius: 6, background: 'var(--surface-2)', fontSize: 13 }}>
+                    <span>{s.custom_name || s.project_name || 'Demo'}</span>
+                    <span className="small muted">{s.estStart}{s.estEnd ? ` – ${s.estEnd}` : ''}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
-      {/* ── All groups view (all users) ── */}
+      {/* ── All groups view (everyone) ── */}
       {groupKeys.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, marginBottom: 14 }}>All Groups</h3>
@@ -260,9 +255,12 @@ export default function JudgingGroups() {
                   </div>
                 )}
                 <div className="stack" style={{ gap: 4 }}>
-                  {groups[g].projects.map((p) => (
+                  {groups[g].projects.map((p, idx) => (
                     <div key={p.id} style={{ fontSize: 13, padding: '5px 8px', background: 'var(--surface)', borderRadius: 5 }}>
-                      {p.name}
+                      <div>{p.name}</div>
+                      {pp && startStr && (
+                        <div className="small muted">{projectSlotTime(g, idx, startStr, jt, pp)}</div>
+                      )}
                     </div>
                   ))}
                   {groups[g].projects.length === 0 && <div className="faint small">No projects yet</div>}
@@ -276,8 +274,8 @@ export default function JudgingGroups() {
         </div>
       )}
 
-      {groupKeys.length === 0 && !isAdmin && (
-        <div className="card"><p className="muted">Judging groups haven't been set up yet.</p></div>
+      {groupKeys.length === 0 && (
+        <div className="card"><p className="muted">Judging groups haven't been set up yet. The admin will configure this in the Admin panel.</p></div>
       )}
     </div>
   );

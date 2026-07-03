@@ -8,12 +8,12 @@ router.use(authRequired, hackathonContext);
 async function slotWithProject(slot) {
   if (!slot) return null;
   if (!slot.project_id) return slot;
-  const project = await get('SELECT id, name, award_tag FROM projects WHERE id = ?', [slot.project_id]);
+  const project = await get('SELECT id, name, award_tag, judge_group FROM projects WHERE id = ?', [slot.project_id]);
   const team = await all(
     `SELECT u.email FROM project_participants pp JOIN users u ON u.id = pp.user_id WHERE pp.project_id = ?`,
     [slot.project_id]
   );
-  return { ...slot, project_name: project?.name || '', project_award: project?.award_tag || '', team: team.map((t) => t.email) };
+  return { ...slot, project_name: project?.name || '', project_award: project?.award_tag || '', project_judge_group: project?.judge_group || '', team: team.map((t) => t.email) };
 }
 
 // List all demo slots with joined project info

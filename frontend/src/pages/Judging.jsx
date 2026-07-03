@@ -14,11 +14,36 @@ const INVEST_UNITS = [
   { label: 'Billion (B)', mult: 1e9 },
 ];
 
+const JG_GC = { A: '#ef4444', B: '#3b82f6', C: '#22c55e', D: '#f59e0b', E: '#a855f7', F: '#06b6d4', G: '#ec4899', H: '#84cc16' };
+const jggc = (g) => JG_GC[g] || '#6b7280';
+
+function jgFmtTime(h, m) {
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+function jgGroupWindow(g, startStr, judgeTimeMins) {
+  if (!startStr || !judgeTimeMins) return null;
+  const [hh, mm] = startStr.split(':').map(Number);
+  const idx = g.charCodeAt(0) - 65;
+  const startMins = hh * 60 + mm + idx * judgeTimeMins;
+  const endMins = startMins + judgeTimeMins;
+  return `${jgFmtTime(Math.floor(startMins / 60) % 24, startMins % 60)} – ${jgFmtTime(Math.floor(endMins / 60) % 24, endMins % 60)}`;
+}
+function jgProjectSlot(g, pos, startStr, judgeTimeMins, perProjectMins) {
+  if (!startStr || !judgeTimeMins || !perProjectMins) return null;
+  const [hh, mm] = startStr.split(':').map(Number);
+  const idx = g.charCodeAt(0) - 65;
+  const groupStart = hh * 60 + mm + idx * judgeTimeMins;
+  const s = groupStart + pos * perProjectMins;
+  const e = s + perProjectMins;
+  return `${jgFmtTime(Math.floor(s / 60) % 24, s % 60)} – ${jgFmtTime(Math.floor(e / 60) % 24, e % 60)}`;
+}
+
 export default function Judging() {
   const { meta, hid } = useOutletContext();
   const criteria = meta.score_criteria;
   const [view, setView] = useState('score'); // 'score' | 'results' | 'invest'
   const [projects, setProjects] = useState([]);
+  const [jgData, setJgData] = useState(null);
   const [sponsorFilter, setSponsorFilter] = useState('');
   const [selected, setSelected] = useState(null);
   const [detail, setDetail] = useState(null); // project shown in the modal
@@ -35,6 +60,9 @@ export default function Judging() {
     get(`/api/hackathons/${hid}/projects${q}`).then(setProjects);
   }
   useEffect(loadProjects, [sponsorFilter, hid]);
+  useEffect(() => {
+    get(`/api/hackathons/${hid}/judging-groups`).then(setJgData).catch(() => {});
+  }, [hid]);
 
   async function openProject(p) {
     setSelected(p); setError(''); setMsg('');
@@ -89,7 +117,7 @@ export default function Judging() {
       </div>
 
       {view === 'score' && (
-        <ScoreView {...{ projects, selected, openProject, scoreData, criteria, form, setForm, investAmt, setInvestAmt, investUnit, setInvestUnit, comments, setComments, submitScore, liveTotal, error, msg, isAdmin: meta.is_admin }} />
+        <ScoreView {...{ projects, selected, openProject, scoreData, criteria, form, setForm, investAmt, setInvestAmt, investUnit, setInvestUnit, comments, setComments, submitScore, liveTotal, error, msg, isAdmin: meta.is_admin, jgData, startStr: meta.hackathon?.start_time }} />
       )}
       {view === 'results' && <ResultsView ranked={byScore} onOpen={setDetail} />}
       {view === 'invest' && <InvestmentsView ranked={byInvestment} onOpen={setDetail} />}
@@ -171,14 +199,70 @@ function DetailModal({ project, criteria, onClose }) {
 }
 
 /* ---------------- View 1: score your projects ---------------- */
-function ScoreView({ projects, selected, openProject, scoreData, criteria, form, setForm, investAmt, setInvestAmt, investUnit, setInvestUnit, comments, setComments, submitScore, liveTotal, error, msg, isAdmin }) {
+function ScoreView({ projects, selected, openProject, scoreData, criteria, form, setForm, investAmt, setInvestAmt, investUnit, setInvestUnit, comments, setComments, submitScore, liveTotal, error, msg, isAdmin, jgData, startStr }) {
   const investTotal = Number(investAmt || 0) * investUnit;
+
+  const myGroup = jgData?.my_judge_group || null;
+  const jt = jgData?.config?.judge_time_minutes;
+  const pp = jgData?.config?.per_project_minutes;
+  const groupProjects = myGroup && jgData?.groups?.[myGroup]?.projects || [];
+
+  // Build a lookup: project id → position in my group
+  const groupPosById = {};
+  groupProjects.forEach((gp, i) => { groupPosById[gp.id] = i; });
+
+  // Sort: my-group projects first (in group order), then the rest
+  const sortedProjects = myGroup
+    ? [
+        ...groupProjects.map((gp) => projects.find((p) => p.id === gp.id)).filter(Boolean),
+        ...projects.filter((p) => !(p.id in groupPosById)),
+      ]
+    : projects;
+
   return (
     <div className="split">
       <div className="list-pick">
-        <p className="small faint" style={{ margin: '0 0 2px' }}>Pick a project to give your score.</p>
+        {/* ── Judge group banner ── */}
+        {myGroup && (
+          <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 8, background: jggc(myGroup) + '18', border: `1.5px solid ${jggc(myGroup)}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 4 }}>
+              <span style={{ fontWeight: 700, fontSize: 15, color: jggc(myGroup) }}>Your Group: {myGroup}</span>
+              {jgGroupWindow(myGroup, startStr, jt) && (
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{jgGroupWindow(myGroup, startStr, jt)}</span>
+              )}
+            </div>
+            {groupProjects.length > 0 && (
+              <div className="stack" style={{ gap: 4, marginTop: 8 }}>
+                {groupProjects.map((gp, idx) => {
+                  const liveP = projects.find((p) => p.id === gp.id);
+                  const slot = jgProjectSlot(myGroup, idx, startStr, jt, pp);
+                  return (
+                    <button
+                      key={gp.id}
+                      type="button"
+                      onClick={() => liveP && openProject(liveP)}
+                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', textAlign: 'left', padding: '6px 10px', borderRadius: 6, border: selected?.id === gp.id ? `1.5px solid ${jggc(myGroup)}` : '1.5px solid transparent', background: selected?.id === gp.id ? jggc(myGroup) + '22' : 'var(--surface)', cursor: 'pointer', gap: 8 }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 500, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{gp.name}</div>
+                        {slot && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{slot}</div>}
+                      </div>
+                      {liveP?.my_score != null
+                        ? <span className="badge green" style={{ flexShrink: 0 }}>✓ {liveP.my_score}</span>
+                        : <span className="badge amber" style={{ flexShrink: 0 }}>to score</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        <p className="small faint" style={{ margin: myGroup ? '8px 0 2px' : '0 0 2px' }}>
+          {myGroup ? 'All projects:' : 'Pick a project to give your score.'}
+        </p>
         {projects.length === 0 && <div className="card empty"><p>No projects.</p></div>}
-        {projects.map((p) => (
+        {sortedProjects.map((p) => (
           <button type="button" key={p.id} className={`item ${selected?.id === p.id ? 'active' : ''}`} onClick={() => openProject(p)}>
             <div className="spread">
               <strong style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</strong>
