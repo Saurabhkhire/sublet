@@ -115,6 +115,8 @@ export default function DemoSchedule() {
   const [elapsed, setElapsed]       = useState(0);
   const [liveStartedAt, setLiveStartedAt] = useState(null);
   const autoStart = meta.hackathon.auto_advance_demo !== 0;
+  const [manualStep, setManualStep] = useState(null); // null | 'speech' | 'timer'
+  const [manualText, setManualText] = useState('');
 
   const timerRef   = useRef(null);
   const alerted2   = useRef(false);
@@ -163,8 +165,13 @@ export default function DemoSchedule() {
     await put(`${base}/${first.id}`, { status: 'speaking', actual_start: new Date().toISOString() });
     await load();
 
-    // Voice announcement — timer only starts AFTER the MC finishes speaking
     const voiceMode = meta.hackathon.voice_mode || 'off';
+    if (voiceMode === 'manual') {
+      setManualText(`Our first demo is from team ${slotName(first)}. Please welcome the team.`);
+      setManualStep('speech');
+      return; // admin clicks 🎙 Speak Intro then ▶ Start Timer
+    }
+
     await speakVoice(`Our first demo is from team ${slotName(first)}. Please welcome the team.`, voiceMode);
 
     const now = Date.now();
@@ -177,6 +184,7 @@ export default function DemoSchedule() {
     const cur = currentSlot();
     const eligible = slots.filter((s) => s.id !== currentId && isEligible(s));
     const next = eligible[0] || null;
+    setManualStep(null); setManualText('');
     if (autoStart || !next) {
       if (cur) await put(`${base}/${cur.id}`, { status: 'completed', actual_end: new Date().toISOString() });
 
@@ -190,11 +198,15 @@ export default function DemoSchedule() {
         setCurrentId(next.id); setPendingId(null);
         setElapsed(0);
 
-        // Mark speaking, then announce, then start timer
         await put(`${base}/${next.id}`, { status: 'speaking', actual_start: new Date().toISOString() });
         await load();
 
-        const voiceMode = meta.hackathon.voice_mode || 'off';
+        if (voiceMode === 'manual') {
+          setManualText(`Our next demo is from team ${slotName(next)}. Please welcome the team.`);
+          setManualStep('speech');
+          return;
+        }
+
         await speakVoice(`Our next demo is from team ${slotName(next)}. Please welcome the team.`, voiceMode);
 
         const now = Date.now();
@@ -211,17 +223,36 @@ export default function DemoSchedule() {
     }
   }
 
+  async function doManualSpeech() {
+    const text = manualText;
+    setManualStep('timer');
+    if (text) await speakVoice(text, 'female');
+  }
+
+  function doManualTimer() {
+    setManualStep(null);
+    setManualText('');
+    const now = Date.now();
+    setLiveStartedAt(now);
+    startTimer(now);
+  }
+
   async function startPending() {
     if (!pendingId) return;
     const pending = pendingSlot();
     setCurrentId(pendingId); setPendingId(null);
     setElapsed(0);
 
-    // Mark speaking, then announce, then start timer
     await put(`${base}/${pendingId}`, { status: 'speaking', actual_start: new Date().toISOString() });
     await load();
 
     const voiceMode = meta.hackathon.voice_mode || 'off';
+    if (voiceMode === 'manual') {
+      if (pending) setManualText(`Our next demo is from team ${slotName(pending)}. Please welcome the team.`);
+      setManualStep('speech');
+      return;
+    }
+
     if (pending) {
       await speakVoice(`Our next demo is from team ${slotName(pending)}. Please welcome the team.`, voiceMode);
     }
@@ -411,9 +442,19 @@ export default function DemoSchedule() {
           {isPaused && <div style={{ fontSize: 14, opacity: 0.8, marginBottom: 8 }}>⏸ Paused</div>}
           {isAdmin && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-              <button style={B_GRY_SM} onClick={togglePause}>{isPaused ? '▶ Resume' : '⏸ Pause'}</button>
-              <button style={B_SM} onClick={advance}>Next ▶</button>
-              <button style={B_AMB_SM} onClick={skipCurrent}>Skip ⏭</button>
+              {manualStep === 'speech' && (
+                <button style={{ ...B_SM, padding: '7px 18px', fontSize: 14 }} onClick={doManualSpeech}>🎙 Speak Intro</button>
+              )}
+              {manualStep === 'timer' && (
+                <button style={{ ...B_SM, padding: '7px 18px', fontSize: 14 }} onClick={doManualTimer}>▶ Start Timer</button>
+              )}
+              {!manualStep && (
+                <>
+                  <button style={B_GRY_SM} onClick={togglePause}>{isPaused ? '▶ Resume' : '⏸ Pause'}</button>
+                  <button style={B_SM} onClick={advance}>Next ▶</button>
+                  <button style={B_AMB_SM} onClick={skipCurrent}>Skip ⏭</button>
+                </>
+              )}
             </div>
           )}
         </div>

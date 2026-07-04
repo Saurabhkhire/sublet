@@ -140,6 +140,8 @@ export default function Schedule() {
   const [elapsed, setElapsed]       = useState(0);
   const [liveStartedAt, setLiveStartedAt] = useState(null);
   const autoStart = meta.hackathon.auto_stop_speaker !== 0;
+  const [manualStep, setManualStep] = useState(null); // null | 'speech' | 'timer'
+  const [manualText, setManualText] = useState('');
 
   const timerRef      = useRef(null);
   const alerted2      = useRef(false);
@@ -224,16 +226,28 @@ export default function Schedule() {
 
     // Voice announcement — timer only starts AFTER the MC finishes speaking
     const voiceMode = meta.hackathon.voice_mode || 'off';
-    if (voiceMode !== 'off') {
-      const sp = (list || speakers).find((s) => s.id === id);
+    const sp = (list || speakers).find((s) => s.id === id);
+
+    if (voiceMode === 'manual') {
+      // Admin manually triggers speech then timer via on-screen buttons
       if (sp) {
         const from  = sp.title ? ` from ${sp.title}` : '';
         const about = sp.notes ? ` They will be talking about ${sp.notes}.` : '';
-        await speakVoice(
-          `Our ${isFirst ? 'first' : 'next'} speaker is ${sp.name}${from}.${about} Please give them a warm welcome.`,
-          voiceMode
-        );
+        setManualText(`Our ${isFirst ? 'first' : 'next'} speaker is ${sp.name}${from}.${about} Please give them a warm welcome.`);
+      } else {
+        setManualText('');
       }
+      setManualStep('speech');
+      return; // timer starts when admin clicks ▶ Start Timer
+    }
+
+    if (voiceMode !== 'off' && sp) {
+      const from  = sp.title ? ` from ${sp.title}` : '';
+      const about = sp.notes ? ` They will be talking about ${sp.notes}.` : '';
+      await speakVoice(
+        `Our ${isFirst ? 'first' : 'next'} speaker is ${sp.name}${from}.${about} Please give them a warm welcome.`,
+        voiceMode
+      );
     }
 
     // Only start the timer if this is still the current activation (not superseded)
@@ -281,8 +295,21 @@ export default function Schedule() {
   function pause()  { setIsPaused(true);  stopTimer(); }
   function resume() { setIsPaused(false); startTimer(); }
 
+  async function doManualSpeech() {
+    const text = manualText;
+    setManualStep('timer');
+    if (text) await speakVoice(text, 'female');
+  }
+
+  function doManualTimer() {
+    setManualStep(null);
+    setManualText('');
+    startTimer();
+  }
+
   async function finishAndAdvance(status) {
     stopTimer();
+    setManualStep(null); setManualText('');
     if (!current) return;
     await put(`/api/hackathons/${hid}/speakers/${current.id}`, {
       status,
@@ -505,37 +532,55 @@ export default function Schedule() {
             {isOvertime ? `${fmtSecs(Math.abs(timeLeft))} overtime` : `of ${current.duration_minutes} min`}
           </div>
 
-          {/* Primary controls */}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-            {isPaused
-              ? <button style={B} onClick={resume}>▶ Resume</button>
-              : <button style={B} onClick={pause}>⏸ Pause</button>
-            }
-            <button style={B} onClick={() => finishAndAdvance('completed')}>
-              {autoStart ? '⏭ Done & Start Next' : '⏭ Done — Queue Next'}
-            </button>
-          </div>
+          {/* Primary controls — manual mode shows step-by-step MC buttons */}
+          {isAdmin && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+              {manualStep === 'speech' && (
+                <button style={{ ...B, fontSize: 15, padding: '10px 28px' }} onClick={doManualSpeech}>
+                  🎙 Speak Intro
+                </button>
+              )}
+              {manualStep === 'timer' && (
+                <button style={{ ...B, fontSize: 15, padding: '10px 28px' }} onClick={doManualTimer}>
+                  ▶ Start Timer
+                </button>
+              )}
+              {!manualStep && (
+                <>
+                  {isPaused
+                    ? <button style={B} onClick={resume}>▶ Resume</button>
+                    : <button style={B} onClick={pause}>⏸ Pause</button>
+                  }
+                  <button style={B} onClick={() => finishAndAdvance('completed')}>
+                    {autoStart ? '⏭ Done & Start Next' : '⏭ Done — Queue Next'}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
-          {/* Add time */}
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-            <span className="faint small">Add time:</span>
-            {[1, 2, 5].map((m) => (
-              <button key={m} style={B_SM} onClick={() => addTime(m)}>+{m} min</button>
-            ))}
-          </div>
-
-          {/* Miss / Skip */}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <button style={B_AMB_SM} onClick={missSpeaker}>
-              ↩ Miss — Reschedule to Later
-            </button>
-            <button style={B_GRY_SM} onClick={() => finishAndAdvance('skipped')}>
-              ⏭ Skip Permanently
-            </button>
-          </div>
-          <div className="faint" style={{ fontSize: 11, marginTop: 8 }}>
-            Miss = speaker gets another slot at the end · Skip = removed from today's run
-          </div>
+          {/* Add time + Miss / Skip — hidden during manual pending steps */}
+          {isAdmin && !manualStep && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                <span className="faint small">Add time:</span>
+                {[1, 2, 5].map((m) => (
+                  <button key={m} style={B_SM} onClick={() => addTime(m)}>+{m} min</button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <button style={B_AMB_SM} onClick={missSpeaker}>
+                  ↩ Miss — Reschedule to Later
+                </button>
+                <button style={B_GRY_SM} onClick={() => finishAndAdvance('skipped')}>
+                  ⏭ Skip Permanently
+                </button>
+              </div>
+              <div className="faint" style={{ fontSize: 11, marginTop: 8 }}>
+                Miss = speaker gets another slot at the end · Skip = removed from today's run
+              </div>
+            </>
+          )}
         </div>
       )}
 
