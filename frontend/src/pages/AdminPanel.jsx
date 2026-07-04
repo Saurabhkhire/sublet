@@ -66,9 +66,8 @@ function DetailsSection({ hid, meta, reload }) {
         <label>Voice announcements <span className="faint small">(browser text-to-speech for speaker &amp; demo day intros)</span>
           <select value={form.voice_mode} onChange={(e) => set('voice_mode', e.target.value)}>
             <option value="off">No voice</option>
-            <option value="male">Male voice (auto)</option>
-            <option value="female">Female voice (auto)</option>
-            <option value="manual">Manual (admin triggers each line)</option>
+            <option value="male">Male voice</option>
+            <option value="female">Female voice</option>
           </select>
         </label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2, marginBottom: 6 }}>

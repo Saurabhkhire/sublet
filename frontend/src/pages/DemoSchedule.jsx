@@ -166,7 +166,7 @@ export default function DemoSchedule() {
     await load();
 
     const voiceMode = meta.hackathon.voice_mode || 'off';
-    if (voiceMode === 'manual') {
+    if (voiceMode !== 'off' && !autoStart) {
       setManualText(`Our first demo is from team ${slotName(first)}. Please welcome the team.`);
       setManualStep('speech');
       return; // admin clicks 🎙 Speak Intro then ▶ Start Timer
@@ -201,7 +201,7 @@ export default function DemoSchedule() {
         await put(`${base}/${next.id}`, { status: 'speaking', actual_start: new Date().toISOString() });
         await load();
 
-        if (voiceMode === 'manual') {
+        if (voiceMode !== 'off' && !autoStart) {
           setManualText(`Our next demo is from team ${slotName(next)}. Please welcome the team.`);
           setManualStep('speech');
           return;
@@ -225,8 +225,9 @@ export default function DemoSchedule() {
 
   async function doManualSpeech() {
     const text = manualText;
+    const voiceMode = meta.hackathon.voice_mode || 'off';
     setManualStep('timer');
-    if (text) await speakVoice(text, 'female');
+    if (text && voiceMode !== 'off') await speakVoice(text, voiceMode);
   }
 
   function doManualTimer() {
@@ -247,7 +248,7 @@ export default function DemoSchedule() {
     await load();
 
     const voiceMode = meta.hackathon.voice_mode || 'off';
-    if (voiceMode === 'manual') {
+    if (voiceMode !== 'off' && !autoStart) {
       if (pending) setManualText(`Our next demo is from team ${slotName(pending)}. Please welcome the team.`);
       setManualStep('speech');
       return;

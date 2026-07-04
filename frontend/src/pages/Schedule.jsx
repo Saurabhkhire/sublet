@@ -228,8 +228,8 @@ export default function Schedule() {
     const voiceMode = meta.hackathon.voice_mode || 'off';
     const sp = (list || speakers).find((s) => s.id === id);
 
-    if (voiceMode === 'manual') {
-      // Admin manually triggers speech then timer via on-screen buttons
+    if (voiceMode !== 'off' && !autoStart) {
+      // Auto-advance is OFF — admin manually triggers each MC line and the timer
       if (sp) {
         const from  = sp.title ? ` from ${sp.title}` : '';
         const about = sp.notes ? ` They will be talking about ${sp.notes}.` : '';
@@ -297,8 +297,9 @@ export default function Schedule() {
 
   async function doManualSpeech() {
     const text = manualText;
+    const voiceMode = meta.hackathon.voice_mode || 'off';
     setManualStep('timer');
-    if (text) await speakVoice(text, 'female');
+    if (text && voiceMode !== 'off') await speakVoice(text, voiceMode);
   }
 
   function doManualTimer() {
