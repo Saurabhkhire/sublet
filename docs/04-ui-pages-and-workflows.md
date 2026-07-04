@@ -262,9 +262,41 @@ own. **Flow picture** `[Open] -> [Load mine] -> [Show]`
 
 ---
 
+## UI Page: `Hackathon · Project Demo Groups`
+- **Where to find it:** `/h/:id/judging-groups`, "Project Demo Groups" in the sidebar.
+- **Purpose:** Show participants their project's demo group and schedule, show judges their group
+  and time slot, and let judges check in.
+
+| Name | Type | Mandatory |
+|------|------|-----------|
+| Your Project card (participants) | Card showing group, time window, slot | — |
+| Your Judge Schedule card (judges) | Card with group, window, project list | — |
+| Mark My Attendance button (un-checked-in judges) | Button | — |
+| Demo Day Schedule | Grouped schedule by demo group | — |
+| All Demo Groups | Grid of all groups with projects and judges | — |
+
+### Workflow 1: Participant views their schedule
+**What the user sees** A card at the top shows their **project name**, **demo group letter**, the
+**group time window**, their **per-project slot time**, and their **demo day slot time**. If groups
+haven't been assigned, the card shows "Groups not assigned yet."
+**What the system does** Look up the viewer's project for this hackathon; find its judge_group;
+compute the time slot from the judging config.
+
+### Workflow 2: Judge checks in
+**What the user sees** If not yet checked in, a "Mark My Attendance" button appears (always
+enabled). After clicking: if groups exist, the judge is instantly placed in a group and the button
+is replaced by their group details. If groups haven't been assigned yet, a yellow "✓ You are
+checked in — awaiting group" card appears. The judge's schedule (group, time window, projects to
+review with slot times and "Score ↗" links) appears once placed.
+**What the system does** Mark attended_at timestamp. Groups assigned and auto-assign active?
+**YES:** assign to the next group in round-robin. **NO:** leave group blank; admin assigns later.
+
+---
+
 ## UI Page: `Hackathon · Judging`
 - **Where to find it:** `/h/:id/judging` (judges/admins only).
-- **Purpose:** Three tabs — **Score projects** (give your own scores + investment), **Results &
+- **Purpose:** Three sections — a **Judge Group Projects** panel (when the judge has a group),
+  then three tabs: **Score projects** (give your own scores + investment), **Results &
   averages** (leaderboard of average scores), and **Investments** (total money offered per project
   across judges).
 - **What is on the screen:**
@@ -297,6 +329,15 @@ own. **Flow picture** `[Open] -> [Load mine] -> [Show]`
 
 - **Validation:** each category 0–100; non-judges are denied access.
 - **When something goes wrong:** "<category> must be between 0 and 100".
+
+### Workflow 0: View Judge Group Projects panel
+**What the user sees** Before the tabs, a coloured card titled "Judge Group Projects — Group X"
+shows the judge's group, the overall time window, and each project in the group with its
+individual time slot, a score status badge (✓ scored / "to score"), and a "Score ↗" button.
+Clicking "Score ↗" switches to the Score tab and opens that project.
+**What the system does** Load judging-groups data; if the judge has a group, render the group
+panel; project list sorted by group order.
+**Flow picture** `[Open Judging] -> {has group?} --NO--> [tabs only]; --YES--> [Group panel + tabs]`
 
 ### Workflow 1: Score a project & set an investment (Score projects tab)
 **What the user sees** Pick a project (its row shows whether **you** have scored it). Review the
@@ -342,11 +383,13 @@ projects — the average and per-category averages. Close to return to the leade
 
 ## UI Page: `Hackathon · Admin` (admin only)
 - **Where to find it:** `/h/:id/admin`.
-- **Purpose:** Configure this hackathon: details, tracks, sponsors, judges, projects, matching;
-  plus a danger zone to reset or delete.
-- **What is on the screen:** Details form; Tracks editor; Sponsors editor; Judges (search-to-add
-  users); Projects editor (expand any project to edit it); Matching panel (counts, Run matching,
-  opt-ins table, formed teams); Danger zone (Delete all projects & judge data; Delete hackathon).
+- **Purpose:** Configure this hackathon: details, tracks, sponsors, judges + demo-group
+  assignment, projects, speakers, demo slots, awards, emails; plus a danger zone.
+- **What is on the screen:** Details form; Tracks editor; Sponsors editor; **Judges &
+  Assignment** (unified card — judging params, search-to-add judges, judge table with attendance
+  checkbox + group badge + Remove button, group-assign controls); Projects editor; Speakers;
+  Demo Slots; Awards; Voice Rules; **Emails** (send-once per person with sent count + Reset);
+  Danger zone (Delete all projects & judge data; Delete hackathon).
 - **Validation:** track/sponsor names non-empty; matching needs new opt-ins; destructive actions
   confirm first.
 
@@ -370,12 +413,39 @@ Credits**, and **Prizes**; add/save/delete.
 instructions and prizes appear on the Overview (Sponsors, Tool Access & Credits, Prizes).
 **Flow picture** `[Edit sponsor fields] -> {name empty?} --YES--> [Reject]; --NO--> [Saved]`
 
-### Workflow 4: Assign judges
-**What the user sees** Type a name or email into the **search box** — a dropdown shows up to 20
-matching users as you type. Click a result to add them as a judge chip. ✕ on a chip removes them.
-**What the system does** Fetch matching users (≤ 20) on each keystroke (debounced). Grant/revoke
-that user's view+judge access **for this hackathon only**.
-**Flow picture** `[Type email] -> [Dropdown results] -> [Pick] -> [Judge chip]; [✕] -> [Revoke]`
+### Workflow 4: Manage judges & demo-group assignment (Judges & Assignment card)
+**What the user sees**
+1. Two number inputs: **Total judge time (min)** and **Time per project (min)**. A hint shows the
+   computed projects-per-group and group count. Click **Save params** to store them.
+2. Below the params: a search box — type an email to find a user and click to add them as a judge.
+3. A table lists every judge: their email, an **Attended** checkbox, their **Group** badge (or a
+   dash if not yet placed), and a **Remove** button. Checking the box marks them as present;
+   unchecking clears it. The checkbox column has a fixed width so the row never shifts.
+4. Action buttons: **▶ Assign Groups** (or **↺ Re-assign Groups**) to distribute all projects
+   (and any pre-checked-in judges) into demo groups; **⏸ Stop Auto-assign** / **▶ Resume
+   Auto-assign** to pause or resume automatic placement of new judges; **↺ Reset All** to clear
+   every group, project, and attendance record (confirmation required).
+
+**What the system does**
+1. Params saved immediately to the database; recomputed on each load.
+2. Adding a judge grants them view+judge access for this hackathon only.
+3. Toggling attendance sets or clears `attended_at`; if groups are assigned and auto-assign is
+   active, a newly-checked-in judge is immediately placed in the next round-robin group.
+4. Removing a judge revokes access and clears any group assignment.
+5. Assign Groups: splits all submitted projects evenly across groups A, B, C …; places each
+   pre-checked-in judge in a group; sets `assigned_at`.
+
+**Simple logic summary** IF added THEN grant access; IF attend toggled AND auto-assign active
+THEN place in group; IF Assign Groups clicked THEN distribute all projects + checked-in judges.
+
+**Flow picture**
+```
+[Save params] -> [Stored; hint updated]
+[Search & add judge] -> [Table row: email | checkbox | group | Remove]
+[Check Attended] -> {auto-assign active?} --YES--> [Place in group]; --NO--> [Awaiting]
+[▶ Assign Groups] -> [Distribute projects + judges into groups A, B, C…]
+[Remove] -> [Access revoked]
+```
 
 ### Workflow 5: Run team matching
 **What the user sees** Counts (opted in / waiting / runs); Run forms teams of ≤4 and lists them.
@@ -422,4 +492,22 @@ scores for this hackathon. Tracks, sponsors, judges and matching remain.
 [▼ edit] -> [Edit form: details + participants search + track/sponsor checkboxes]
          -> [Save] -> {admin & name ok?} --NO--> [Error]; --YES--> [Updated row]
          -> [Delete project] -> {confirm?} --YES--> [Removed]
+```
+
+### Workflow 9: Send emails (Emails section)
+**What the user sees** Each email type (e.g. Welcome, Reminder, Deadline) is listed as a card
+showing the label, who it goes to, and (if any have already been sent) a green "✓ N sent" count.
+Click **Send** → the system emails everyone who has not received that type yet. The result shows
+how many were sent, how many were skipped (already sent), and any failures. If anyone was already
+sent, a **Reset** button appears — clicking it clears the tracking so the next send will go to
+everyone again (with a confirmation prompt).
+**What the system does** For each recipient: already in `email_sends` for this type + hackathon?
+**YES:** skip. **NO:** send, then record in `email_sends`. Reset deletes all tracking rows for that
+type so everyone is eligible again.
+**Simple logic summary** Send once per user per type; skip repeats; Reset clears the tracking.
+**Flow picture**
+```
+[Send] -> for each recipient: {already sent?} --YES--> skip; --NO--> [Email + record]
+       -> [Result: N sent · M skipped]
+[Reset] -> {confirm?} --YES--> [Delete tracking rows] -> [Next send goes to all]
 ```

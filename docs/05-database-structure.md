@@ -85,6 +85,14 @@ Matching track/sponsor selections are stored as JSON text.
   0–100; `innovation` 0–100; `impact` 0–100; `implementation` 0–100; `total` REAL (average of the
   five); `investment` REAL (how much this judge would invest, ≥ 0); `comments` text.
 
+### Table: `email_sends`
+- **Purpose:** Tracks which email type has been sent to which user for each hackathon, enforcing
+  send-once behaviour — re-sending an email type skips any user already in this table.
+- **Primary Key:** `id` · **Unique:** `(hackathon_id, user_id, email_type)`
+- **Columns:** `id` int PK; `hackathon_id` int (FK→hackathons.id); `user_id` int
+  (FK→users.id); `email_type` text (e.g. `welcome`, `participant_reminder`,
+  `deadline_reminder`); `sent_at` text (ISO timestamp, default CURRENT_TIMESTAMP).
+
 ## 5.3 Legacy migration
 `backend/src/migrate.js` upgrades a pre-multi-hackathon SQLite database in place: it creates a
 hackathon named **"Ziward Hackathon"**, adds `hackathon_id` to the scoped tables and backfills

@@ -148,8 +148,8 @@ On **Register** (and optionally after verify-email), show **Put as sponsor**, **
 
 ### 1.1 Project Summary
 - **Project Name:** SUBLET
-- **Version / Update Tag:** v2.8.0
-- **Date:** 2026-06-22
+- **Version / Update Tag:** v2.10.0
+- **Date:** 2026-07-04
 - **Owner / Team:** Hackathon organizers
 - **Short Description:** A **multi-hackathon** platform. Admins create hackathons, each with its
   own details, tracks, sponsors, selected judges and matching run. Within a hackathon,

@@ -11,8 +11,7 @@ export default function AdminPanel() {
       <DetailsSection hid={hid} meta={meta} reload={reload} />
       <TracksEditor hid={hid} reload={reload} />
       <SponsorsEditor hid={hid} reload={reload} />
-      <JudgesSection hid={hid} />
-      <JudgeAssignmentSection hid={hid} meta={meta} />
+      <JudgesAndAssignmentSection hid={hid} />
       <SpeakersSection hid={hid} />
       <DemoSlotsSection hid={hid} />
       <AwardsSection hid={hid} />
@@ -186,38 +185,6 @@ function SponsorsEditor({ hid, reload }) {
   );
 }
 
-function JudgesSection({ hid }) {
-  const [judges, setJudges] = useState([]);
-  function load() { get(`/api/hackathons/${hid}/judges`).then(setJudges); }
-  useEffect(load, [hid]);
-  async function add(user) {
-    await post(`/api/hackathons/${hid}/judges`, { user_id: user.id });
-    load();
-  }
-  async function remove(uid) { await del(`/api/hackathons/${hid}/judges/${uid}`); load(); }
-
-  const judgeIds = new Set(judges.map((j) => j.id));
-
-  return (
-    <section className="card">
-      <h3 style={{ marginTop: 0 }}>Judges · who can view &amp; score projects</h3>
-      <p className="muted small">Search and add people who may see project details and submit judging scores.</p>
-      <div className="row" style={{ marginBottom: 14 }}>
-        <UserSearchInput endpoint="/api/admin/users" onSelect={add} excludeIds={judgeIds} placeholder="Search users by email to add as judge…" />
-      </div>
-      {judges.length === 0 ? <span className="faint small">No judges assigned yet.</span> : (
-        <div className="multiselect">
-          {judges.map((j) => (
-            <span key={j.id} className="badge accent" style={{ paddingRight: 6 }}>
-              {j.email}
-              <button className="link danger sm" style={{ padding: '0 4px' }} onClick={() => remove(j.id)}>✕</button>
-            </span>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
 
 // Admin section to view and fully edit any project in this hackathon.
 function ProjectsSection({ hid, meta }) {
@@ -723,13 +690,15 @@ function SpeakersSection({ hid }) {
   );
 }
 
-// ── Judge Assignment (config + attendance; full group map on /judging-groups) ─────────────
+// ── Judges & Assignment (unified: add judges + config + attendance) ──────────────────────
 
 const JA_GC = { A: '#ef4444', B: '#3b82f6', C: '#22c55e', D: '#f59e0b', E: '#a855f7', F: '#06b6d4', G: '#ec4899', H: '#84cc16' };
 const jagc = (g) => JA_GC[g] || '#6b7280';
 
-function JudgeAssignmentSection({ hid }) {
+function JudgesAndAssignmentSection({ hid }) {
   const base = `/api/hackathons/${hid}/judging-groups`;
+  const judgesBase = `/api/hackathons/${hid}/judges`;
+
   const [data, setData] = useState(null);
   const [params, setParams] = useState({ judge_time_minutes: 60, per_project_minutes: 5 });
   const [msg, setMsg] = useState('');
@@ -740,23 +709,39 @@ function JudgeAssignmentSection({ hid }) {
     try {
       const d = await get(base);
       setData(d);
-      if (d.config?.judge_time_minutes) setParams({ judge_time_minutes: d.config.judge_time_minutes, per_project_minutes: d.config.per_project_minutes });
+      if (d.config?.judge_time_minutes) {
+        setParams({ judge_time_minutes: d.config.judge_time_minutes, per_project_minutes: d.config.per_project_minutes });
+      }
     } catch (e) { setError(e.message); }
   }
   useEffect(load, [hid]);
+
+  async function addJudge(user) {
+    try {
+      await post(judgesBase, { user_id: user.id });
+      await load();
+    } catch (e) { setError(e.message); }
+  }
+
+  async function removeJudge(userId) {
+    try {
+      await del(`${judgesBase}/${userId}`);
+      await load();
+    } catch (e) { setError(e.message); }
+  }
 
   async function saveParams(e) {
     e.preventDefault();
     setBusy(true); setMsg(''); setError('');
     try {
       await put(base + '/config', params);
-      setMsg('Saved!'); setTimeout(() => setMsg(''), 1500);
+      setMsg('Params saved!'); setTimeout(() => setMsg(''), 1800);
       await load();
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
 
   async function assign() {
-    if (!confirm('Assign all projects to judging groups now? Existing assignments will be overwritten.')) return;
+    if (!confirm('Assign all projects to demo groups now? Existing assignments will be overwritten.')) return;
     setBusy(true); setMsg(''); setError('');
     try {
       const r = await post(base + '/assign');
@@ -779,20 +764,14 @@ function JudgeAssignmentSection({ hid }) {
 
   async function toggleAutoAssign() {
     setBusy(true); setError('');
-    try {
-      await post(base + '/toggle-auto');
-      await load();
-    } catch (e) { setError(e.message); } finally { setBusy(false); }
+    try { await post(base + '/toggle-auto'); await load(); } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
 
   async function toggleAttend(j) {
     setBusy(true); setError('');
     try {
-      if (j.attended_at) {
-        await del(`${base}/attend/${j.user_id}`);
-      } else {
-        await post(`${base}/attend/${j.user_id}`);
-      }
+      if (j.attended_at) { await del(`${base}/attend/${j.user_id}`); }
+      else { await post(`${base}/attend/${j.user_id}`); }
       await load();
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
@@ -803,15 +782,18 @@ function JudgeAssignmentSection({ hid }) {
   const stopped = data?.auto_assign_stopped;
   const groupKeys = data?.groups ? Object.keys(data.groups).sort() : [];
   const total = groupKeys.reduce((a, k) => a + data.groups[k].projects.length, 0) + (data?.unassigned_projects || 0);
+  const judges = data?.all_judges || [];
+  const judgeIds = new Set(judges.map((j) => j.user_id));
 
   return (
     <section className="card">
-      <h3 style={{ marginTop: 0, marginBottom: 4 }}>⚖️ Judge Assignment</h3>
-      <p className="muted small" style={{ marginTop: 0, marginBottom: 12 }}>
-        Set judging parameters, assign groups, and track judge attendance here.
+      <h3 style={{ marginTop: 0, marginBottom: 4 }}>⚖️ Judges &amp; Assignment</h3>
+      <p className="muted small" style={{ marginTop: 0, marginBottom: 14 }}>
+        Configure judging parameters, manage judges, track attendance, and assign demo groups.
       </p>
       {error && <p className="error">{error}</p>}
 
+      {/* ── Params ── */}
       <form onSubmit={saveParams}>
         <div className="row" style={{ gap: 16, flexWrap: 'wrap' }}>
           <label style={{ flex: 1, minWidth: 140 }}>
@@ -830,7 +812,7 @@ function JudgeAssignmentSection({ hid }) {
             → {ppg} project(s) per group · {need} group(s) needed for {total} project(s) total
           </div>
         )}
-        <div className="row" style={{ gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+        <div className="row" style={{ gap: 10, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <button type="submit" disabled={busy}>Save params</button>
           <button type="button" className="outline" onClick={assign} disabled={busy}>
             {assigned ? '↺ Re-assign Groups' : '▶ Assign Groups'}
@@ -854,47 +836,80 @@ function JudgeAssignmentSection({ hid }) {
       {assigned && (
         <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--surface-2)', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ color: 'var(--green,#16a34a)', fontSize: 13 }}>✓ Groups assigned</span>
-          <span className="muted small">{groupKeys.length} group(s) · {data?.all_judges?.filter((j) => j.judge_group).length || 0} / {data?.all_judges?.length || 0} judges placed · {data?.all_judges?.filter((j) => j.attended_at && !j.judge_group).length || 0} awaiting group</span>
-          {stopped ? (
-            <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontWeight: 600 }}>⏸ Auto-assign paused</span>
-          ) : (
-            <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4, background: '#f0fdf4', color: '#16a34a', fontWeight: 600 }}>● Auto-assigning new joins</span>
-          )}
+          <span className="muted small">
+            {groupKeys.length} group(s) · {judges.filter((j) => j.judge_group).length} / {judges.length} placed · {judges.filter((j) => j.attended_at && !j.judge_group).length} awaiting
+          </span>
+          {stopped
+            ? <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontWeight: 600 }}>⏸ Auto-assign paused</span>
+            : <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4, background: '#f0fdf4', color: '#16a34a', fontWeight: 600 }}>● Auto-assigning new joins</span>}
         </div>
       )}
 
-      {/* ── Judge attendance list ── */}
-      <div style={{ marginTop: 18 }}>
-        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-          Judge Attendance
-          {!assigned && <span className="faint" style={{ fontWeight: 400, marginLeft: 6 }}>— judges can check in now; groups assigned when you press ▶ Assign Groups</span>}
-        </div>
-        {(data?.all_judges || []).length === 0
-          ? <p className="faint small">No judges added yet — add them in the Judges section above.</p>
-          : (
-            <div className="stack" style={{ gap: 5 }}>
-              {(data.all_judges).map((j) => (
-                <label key={j.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 7, cursor: 'pointer', margin: 0 }}>
-                  <input
-                    type="checkbox"
-                    checked={!!j.attended_at}
-                    disabled={busy}
-                    onChange={() => toggleAttend(j)}
-                    style={{ width: 17, height: 17, flexShrink: 0 }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13 }}>{j.email}</div>
-                  </div>
-                  {j.judge_group
-                    ? <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 5, background: jagc(j.judge_group), color: '#fff', fontWeight: 700, flexShrink: 0 }}>Group {j.judge_group}</span>
-                    : j.attended_at
-                      ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#fef9c3', color: '#854d0e', fontWeight: 600, flexShrink: 0 }}>✓ Present · awaiting group</span>
-                      : <span className="badge" style={{ fontSize: 11, flexShrink: 0 }}>not checked in</span>}
-                </label>
-              ))}
-            </div>
-          )}
+      <div className="divider" style={{ margin: '18px 0 14px' }} />
+
+      {/* ── Add judges (search) ── */}
+      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Judges</div>
+      <div style={{ marginBottom: 12 }}>
+        <UserSearchInput
+          endpoint="/api/admin/users"
+          onSelect={addJudge}
+          excludeIds={judgeIds}
+          placeholder="Search users by email to add as judge…"
+        />
       </div>
+
+      {/* ── Judges table ── */}
+      {judges.length === 0 ? (
+        <p className="faint small" style={{ margin: 0 }}>No judges added yet — search above to add one.</p>
+      ) : (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+          {/* Header */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', padding: '7px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--muted)' }}>
+            <span>Judge email</span>
+            <span style={{ paddingRight: 8, textAlign: 'center' }}>Attended</span>
+            <span style={{ minWidth: 130, textAlign: 'center' }}>Group</span>
+            <span style={{ paddingLeft: 8 }}></span>
+          </div>
+          {/* Rows */}
+          {judges.map((j) => (
+            <div key={j.user_id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 0, alignItems: 'center', padding: '9px 14px', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
+              {/* Email */}
+              <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>{j.email}</span>
+              {/* Attendance checkbox — fixed width column so checking/unchecking won't shift layout */}
+              <span style={{ paddingRight: 8, textAlign: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={!!j.attended_at}
+                  disabled={busy}
+                  onChange={() => toggleAttend(j)}
+                  title={j.attended_at ? 'Clear attendance' : 'Mark as attended'}
+                  style={{ width: 16, height: 16, cursor: 'pointer' }}
+                />
+              </span>
+              {/* Group badge — fixed min-width so status text never shifts the row */}
+              <span style={{ minWidth: 130, textAlign: 'center' }}>
+                {j.judge_group
+                  ? <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 5, background: jagc(j.judge_group), color: '#fff', fontWeight: 700, display: 'inline-block' }}>Group {j.judge_group}</span>
+                  : j.attended_at
+                    ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#fef9c3', color: '#854d0e', fontWeight: 600, display: 'inline-block' }}>✓ awaiting group</span>
+                    : <span style={{ fontSize: 11, color: 'var(--muted)', display: 'inline-block' }}>—</span>}
+              </span>
+              {/* Delete */}
+              <span style={{ paddingLeft: 8 }}>
+                <button
+                  type="button"
+                  className="outline"
+                  style={{ padding: '3px 9px', fontSize: 12, color: '#dc2626', borderColor: '#dc2626' }}
+                  onClick={() => removeJudge(j.user_id)}
+                  title="Remove judge"
+                >
+                  Remove
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -1349,13 +1364,24 @@ const EMAIL_TYPES = [
 function EmailsSection({ hid, meta }) {
   const [results, setResults] = useState({});
   const [busy, setBusy] = useState({});
+  const [status, setStatus] = useState({});
+
+  async function loadStatus() {
+    try { setStatus(await get(`/api/hackathons/${hid}/emails/status`)); } catch (_) {}
+  }
+  useEffect(() => { loadStatus(); }, [hid]);
 
   async function send(type) {
     setBusy((b) => ({ ...b, [type]: true }));
     setResults((r) => ({ ...r, [type]: null }));
     try {
       const res = await post(`/api/hackathons/${hid}/emails/${type}`, {});
-      setResults((r) => ({ ...r, [type]: { ok: true, msg: `Sent to ${res.sent} recipient${res.sent !== 1 ? 's' : ''}${res.errors?.length ? ` (${res.errors.length} failed)` : ''}.` } }));
+      const parts = [];
+      if (res.sent > 0) parts.push(`Sent to ${res.sent}`);
+      if (res.skipped > 0) parts.push(`${res.skipped} skipped (already sent)`);
+      if (res.errors?.length) parts.push(`${res.errors.length} failed`);
+      setResults((r) => ({ ...r, [type]: { ok: true, msg: parts.join(' · ') || 'Done.' } }));
+      await loadStatus();
     } catch (e) {
       setResults((r) => ({ ...r, [type]: { ok: false, msg: e.message } }));
     } finally {
@@ -1363,27 +1389,70 @@ function EmailsSection({ hid, meta }) {
     }
   }
 
+  async function resetType(type) {
+    if (!confirm(`Clear the sent-tracking for "${EMAIL_TYPES.find((t) => t.type === type)?.label}"? Next send will go to everyone again.`)) return;
+    setBusy((b) => ({ ...b, [`reset_${type}`]: true }));
+    try {
+      await del(`/api/hackathons/${hid}/emails/${type}/reset`);
+      setStatus((s) => ({ ...s, [type]: 0 }));
+      setResults((r) => ({ ...r, [type]: { ok: true, msg: 'Sent-tracking cleared — will send to everyone on next send.' } }));
+    } catch (e) {
+      setResults((r) => ({ ...r, [type]: { ok: false, msg: e.message } }));
+    } finally {
+      setBusy((b) => ({ ...b, [`reset_${type}`]: false }));
+    }
+  }
+
   return (
     <section className="card">
       <h3 style={{ marginTop: 0 }}>✉️ Send Emails</h3>
-      <p className="faint small" style={{ marginTop: 0 }}>Configure SMTP above before sending. Emails are sent immediately to all matching recipients.</p>
-      <div className="stack" style={{ gap: 10 }}>
-        {EMAIL_TYPES.map(({ type, label, audience }) => (
-          <div key={type} className="spread" style={{ flexWrap: 'wrap', gap: 8, padding: '10px 12px', background: 'var(--surface,#f8f8f8)', borderRadius: 8 }}>
-            <div>
-              <div style={{ fontWeight: 500, fontSize: 14 }}>{label}</div>
-              <div className="faint small">Sends to all {audience} of this hackathon</div>
-            </div>
-            <div className="row" style={{ gap: 8 }}>
+      <p className="faint small" style={{ marginTop: 0 }}>
+        Configure SMTP above before sending. Each email is sent <strong>once per person</strong> — use Reset to re-send to everyone.
+      </p>
+      <div className="stack" style={{ gap: 8 }}>
+        {EMAIL_TYPES.map(({ type, label, audience }) => {
+          const sentCount = status[type] || 0;
+          return (
+            <div key={type} style={{ padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 500, fontSize: 14 }}>{label}</div>
+                  <div className="faint small">
+                    Sends to all {audience}
+                    {sentCount > 0 && <span style={{ marginLeft: 6, color: '#16a34a' }}>· ✓ {sentCount} sent</span>}
+                  </div>
+                </div>
+                <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+                  {sentCount > 0 && (
+                    <button
+                      type="button"
+                      className="outline"
+                      style={{ padding: '4px 10px', fontSize: 12, color: '#6b7280', borderColor: '#d1d5db' }}
+                      disabled={!!busy[`reset_${type}`]}
+                      onClick={() => resetType(type)}
+                      title="Clear sent-tracking so this can be sent again to everyone"
+                    >
+                      {busy[`reset_${type}`] ? '…' : 'Reset'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    style={{ padding: '5px 14px', fontSize: 13 }}
+                    disabled={!!busy[type]}
+                    onClick={() => send(type)}
+                  >
+                    {busy[type] ? 'Sending…' : 'Send'}
+                  </button>
+                </div>
+              </div>
               {results[type] && (
-                <span className={results[type].ok ? 'success' : 'error'} style={{ fontSize: 13 }}>{results[type].msg}</span>
+                <div className={results[type].ok ? 'success' : 'error'} style={{ fontSize: 12, marginTop: 6 }}>
+                  {results[type].msg}
+                </div>
               )}
-              <button type="button" style={{ padding: '5px 14px', fontSize: 13 }} disabled={!!busy[type]} onClick={() => send(type)}>
-                {busy[type] ? 'Sending…' : 'Send'}
-              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

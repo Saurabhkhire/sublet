@@ -1,6 +1,6 @@
 import express from 'express';
 import nodemailer from 'nodemailer';
-import { get, all } from '../db.js';
+import { get, all, run, insert } from '../db.js';
 import { authRequired, adminRequired, hackathonContext } from '../middleware/auth.js';
 
 const router = express.Router({ mergeParams: true });
@@ -49,6 +49,29 @@ function fmtTime(hhmm) {
   return `${hh % 12 || 12}:${String(mm).padStart(2, '0')} ${hh >= 12 ? 'PM' : 'AM'}`;
 }
 
+// Check if a specific email was already sent to a user for this hackathon+type
+async function alreadySent(hid, userId, type) {
+  const row = await get(
+    'SELECT id FROM email_sends WHERE hackathon_id = ? AND user_id = ? AND email_type = ?',
+    [hid, userId, type]
+  );
+  return !!row;
+}
+
+// Record that we sent this email
+async function markSent(hid, userId, type) {
+  try {
+    await insert('email_sends', {
+      hackathon_id: hid,
+      user_id: userId,
+      email_type: type,
+      sent_at: new Date().toISOString(),
+    });
+  } catch (_) {
+    // Unique constraint violation = already recorded — ignore
+  }
+}
+
 // GET /api/hackathons/:hid/emails/recipients?type=judge_invite
 router.get('/recipients', async (req, res) => {
   const type = req.query.type || '';
@@ -59,6 +82,25 @@ router.get('/recipients', async (req, res) => {
   }
   const rows = await getParticipants(hid);
   res.json({ count: rows.length, emails: rows.map((r) => r.email) });
+});
+
+// GET /api/hackathons/:hid/emails/status — how many have been sent for each type
+router.get('/status', async (req, res) => {
+  const hid = req.hackathonId;
+  const rows = await all(
+    'SELECT email_type, COUNT(*) AS cnt FROM email_sends WHERE hackathon_id = ? GROUP BY email_type',
+    [hid]
+  );
+  const result = {};
+  for (const r of rows) result[r.email_type] = Number(r.cnt);
+  res.json(result);
+});
+
+// DELETE /api/hackathons/:hid/emails/:type/reset — clear sent-tracking for this type
+router.delete('/:type/reset', async (req, res) => {
+  const { type } = req.params;
+  await run('DELETE FROM email_sends WHERE hackathon_id = ? AND email_type = ?', [req.hackathonId, type]);
+  res.json({ ok: true });
 });
 
 // POST /api/hackathons/:hid/emails/:type
@@ -77,11 +119,17 @@ router.post('/:type', async (req, res) => {
   const hackName = h.name || 'Hackathon';
 
   let sent = 0;
+  let skipped = 0;
   const errors = [];
 
-  async function send(to, subject, body) {
+  async function send(userId, to, subject, body) {
+    if (await alreadySent(hid, userId, type)) {
+      skipped++;
+      return;
+    }
     try {
       await transport.sendMail({ from: fromHeader, to, subject, html: html(body) });
+      await markSent(hid, userId, type);
       sent++;
     } catch (e) {
       errors.push(`${to}: ${e.message}`);
@@ -94,7 +142,7 @@ router.post('/:type', async (req, res) => {
     const rules = h.judging_rules || 'Please check with the organiser for judging instructions.';
     for (const j of judges) {
       await send(
-        j.email,
+        j.id, j.email,
         `You're invited to judge at ${hackName}`,
         `<h2>Welcome, Judge!</h2>
          <p>You have been invited to judge at <strong>${hackName}</strong>. We're excited to have you!</p>
@@ -110,7 +158,7 @@ router.post('/:type', async (req, res) => {
     const rules = h.submission_rules || 'Please check with the organiser for submission instructions.';
     for (const p of participants) {
       await send(
-        p.email,
+        p.id, p.email,
         `Submission instructions — ${hackName}`,
         `<h2>Submission Instructions</h2>
          <p>Welcome to <strong>${hackName}</strong>! Here is everything you need to know to submit your project:</p>
@@ -136,12 +184,12 @@ router.post('/:type', async (req, res) => {
         schedLine = `<p><strong>Your demo time slot:</strong> ${fmt(startMins)} – ${fmt(endMins)}</p>`;
       }
       await send(
-        p.email,
+        p.id, p.email,
         `Your schedule — ${hackName}`,
         `<h2>Your Demo Day Schedule</h2>
          <p>Hello! Here is your schedule for <strong>${hackName}</strong>.</p>
          <p><strong>Project:</strong> ${p.project_name}</p>
-         <p><strong>Judging Group:</strong> ${grp}</p>
+         <p><strong>Demo Group:</strong> ${grp}</p>
          ${schedLine}
          <p>Please make sure your project is submitted and ready before your time slot!</p>`
       );
@@ -174,7 +222,7 @@ router.post('/:type', async (req, res) => {
         ? `<ul>${projects.map((p) => `<li>${p.name}</li>`).join('')}</ul>`
         : '<p>Project assignments not yet confirmed.</p>';
       await send(
-        j.email,
+        j.id, j.email,
         `Your judging schedule — ${hackName}`,
         `<h2>Judging Schedule</h2>
          <p>Hello! Here is your judging schedule for <strong>${hackName}</strong>.</p>
@@ -190,7 +238,7 @@ router.post('/:type', async (req, res) => {
     if (!judges.length) return res.status(400).json({ error: 'No judges found.' });
     for (const j of judges) {
       await send(
-        j.email,
+        j.id, j.email,
         `Thank you for judging at ${hackName}!`,
         `<h2>Thank You!</h2>
          <p>Dear Judge,</p>
@@ -206,7 +254,7 @@ router.post('/:type', async (req, res) => {
     const deadlineStr = h.submission_deadline ? ` before ${fmtTime(h.submission_deadline)}` : '';
     for (const p of participants) {
       await send(
-        p.email,
+        p.id, p.email,
         `Reminder: Submit your project — ${hackName}`,
         `<h2>Don't Forget to Submit!</h2>
          <p>Hi there,</p>
@@ -222,7 +270,7 @@ router.post('/:type', async (req, res) => {
     const deadlineStr = h.submission_deadline ? `${fmtTime(h.submission_deadline)}` : 'soon';
     for (const p of participants) {
       await send(
-        p.email,
+        p.id, p.email,
         `⚠️ URGENT: Submit now — ${hackName}`,
         `<h2 style="color:#dc2626">⚠️ Submission Deadline Approaching!</h2>
          <p>Hi there,</p>
@@ -236,7 +284,7 @@ router.post('/:type', async (req, res) => {
     return res.status(400).json({ error: `Unknown email type: ${type}` });
   }
 
-  res.json({ sent, errors: errors.length ? errors : undefined });
+  res.json({ sent, skipped, errors: errors.length ? errors : undefined });
 });
 
 export default router;

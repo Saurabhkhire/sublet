@@ -31,9 +31,7 @@ function projectSlotTime(g, posInGroup, startStr, judgeTimeMins, perProjectMins)
 
 function fmtActual(iso) {
   if (!iso) return null;
-  try {
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch { return null; }
+  try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch { return null; }
 }
 
 function computeDemoTimes(slots, startTimeStr) {
@@ -61,14 +59,8 @@ export default function JudgingGroups() {
   const [msg, setMsg] = useState('');
 
   async function load() {
-    try {
-      const d = await get(`/api/hackathons/${hid}/judging-groups`);
-      setData(d);
-    } catch (e) { setError(e.message); }
-    try {
-      const slots = await get(`/api/hackathons/${hid}/demo-slots`);
-      setDemoSlots(slots);
-    } catch (_) {}
+    try { const d = await get(`/api/hackathons/${hid}/judging-groups`); setData(d); } catch (e) { setError(e.message); }
+    try { const slots = await get(`/api/hackathons/${hid}/demo-slots`); setDemoSlots(slots); } catch (_) {}
   }
   useEffect(() => { load(); }, [hid]);
 
@@ -92,10 +84,7 @@ export default function JudgingGroups() {
   const jt = data.config?.judge_time_minutes;
   const pp = data.config?.per_project_minutes;
   const startStr = meta.hackathon?.start_time;
-
   const timedSlots = computeDemoTimes(demoSlots, startStr);
-
-  // Group demo slots by the project's judge_group
   const demoByGroup = {};
   for (const s of timedSlots) {
     const grp = s.project_judge_group || s.judge_group || '_none';
@@ -103,31 +92,48 @@ export default function JudgingGroups() {
     demoByGroup[grp].push(s);
   }
 
-  // Participant's demo slot
   const myProject = data.my_project;
   const myDemoSlot = myProject ? timedSlots.find((s) => s.project_id === myProject.id) : null;
 
+  // Find the position of my project in its group for slot time calculation
+  const myGroupProjects = myProject?.judge_group ? (groups[myProject.judge_group]?.projects || []) : [];
+  const myProjectPosInGroup = myGroupProjects.findIndex((p) => p.id === myProject?.id);
+
   return (
     <div className="stack">
-      <h1 style={{ marginBottom: 4 }}>Judging Groups</h1>
+      <h1 style={{ marginBottom: 4 }}>Project Demo Groups</h1>
       {error && <p className="error">{error}</p>}
       {msg && <p className="success">{msg}</p>}
 
-      {/* ── My project card (for participants) ── */}
+      {/* ── Participant: my project card ── */}
       {myProject && (
         <div className="card" style={{ borderLeft: `4px solid ${myProject.judge_group ? gc(myProject.judge_group) : 'var(--border)'}` }}>
           <div className="small faint" style={{ textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Your Project</div>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>{myProject.name}</div>
+          <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 6 }}>{myProject.name}</div>
           {myProject.judge_group ? (
-            <div>
-              <span>Assigned to </span>
-              <strong style={{ color: gc(myProject.judge_group), fontSize: 16 }}>Group {myProject.judge_group}</strong>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 14 }}>
+                Demo Group:{' '}
+                <strong style={{ color: gc(myProject.judge_group), fontSize: 18 }}>{myProject.judge_group}</strong>
+              </span>
               {groupWindow(myProject.judge_group, startStr, jt) && (
-                <span className="muted"> · {groupWindow(myProject.judge_group, startStr, jt)}</span>
+                <span className="badge" style={{ background: gc(myProject.judge_group) + '22', color: gc(myProject.judge_group), fontWeight: 600, fontSize: 13 }}>
+                  {groupWindow(myProject.judge_group, startStr, jt)}
+                </span>
+              )}
+              {myProjectPosInGroup >= 0 && pp && startStr && (
+                <span className="muted small">
+                  Your slot: <strong>{projectSlotTime(myProject.judge_group, myProjectPosInGroup, startStr, jt, pp)}</strong>
+                </span>
+              )}
+              {myDemoSlot && (
+                <span className="muted small">
+                  Demo: <strong>{myDemoSlot.estStart}{myDemoSlot.estEnd ? ` – ${myDemoSlot.estEnd}` : ''}</strong>
+                </span>
               )}
             </div>
           ) : (
-            <span className="muted small">Groups not assigned yet</span>
+            <span className="muted small">Demo groups haven't been assigned yet — check back soon.</span>
           )}
         </div>
       )}
@@ -138,11 +144,15 @@ export default function JudgingGroups() {
           <div className="small faint" style={{ textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Your Judge Schedule</div>
           {data.my_judge_group ? (
             <>
-              <div style={{ marginBottom: 12 }}>
-                You are in{' '}
-                <strong style={{ color: gc(data.my_judge_group), fontSize: 20 }}>Group {data.my_judge_group}</strong>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 14 }}>
+                  You are in{' '}
+                  <strong style={{ color: gc(data.my_judge_group), fontSize: 20 }}>Group {data.my_judge_group}</strong>
+                </span>
                 {groupWindow(data.my_judge_group, startStr, jt) && (
-                  <span className="muted"> · {groupWindow(data.my_judge_group, startStr, jt)}</span>
+                  <span className="badge" style={{ background: gc(data.my_judge_group) + '22', color: gc(data.my_judge_group), fontWeight: 600, fontSize: 13 }}>
+                    {groupWindow(data.my_judge_group, startStr, jt)}
+                  </span>
                 )}
               </div>
               {groups[data.my_judge_group] && (
@@ -157,7 +167,7 @@ export default function JudgingGroups() {
                         )}
                       </div>
                       <Link to={`/h/${hid}/judging`}>
-                        <button style={{ fontSize: 12, padding: '4px 12px' }}>Judge ↗</button>
+                        <button style={{ fontSize: 12, padding: '4px 12px' }}>Score ↗</button>
                       </Link>
                     </div>
                   ))}
@@ -167,14 +177,12 @@ export default function JudgingGroups() {
           ) : data.my_judge_attended ? (
             <div style={{ padding: '10px 14px', background: '#fef9c3', borderRadius: 8, border: '1px solid #fde68a' }}>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>✓ You are checked in</div>
-              <div className="muted small">You'll be placed in a judging group once the admin assigns groups. Check back soon.</div>
+              <div className="muted small">You'll be placed in a group once the admin assigns groups. Check back soon.</div>
             </div>
           ) : (
             <div>
               <p className="muted" style={{ marginBottom: 10 }}>
-                {assigned
-                  ? 'Mark your attendance to receive your group assignment.'
-                  : 'Check in now — you\'ll be placed in a group once the admin assigns groups.'}
+                {assigned ? 'Mark your attendance to receive your group assignment.' : "Check in now — you'll be placed in a group once the admin assigns groups."}
               </p>
               <button onClick={attend} disabled={busy}>
                 {busy ? 'Processing…' : '✓ Mark My Attendance'}
@@ -188,8 +196,6 @@ export default function JudgingGroups() {
       {timedSlots.length > 0 && (
         <div className="card">
           <h3 style={{ marginTop: 0, marginBottom: 4 }}>🎬 Demo Day Schedule</h3>
-
-          {/* My project banner */}
           {myDemoSlot && (
             <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 8, background: gc(myProject?.judge_group || 'A') + '22', border: `1.5px solid ${gc(myProject?.judge_group || 'A')}` }}>
               <span style={{ fontWeight: 600 }}>Your project</span>
@@ -203,8 +209,6 @@ export default function JudgingGroups() {
               )}
             </div>
           )}
-
-          {/* All slots grouped by judge_group */}
           {groupKeys.filter((g) => (demoByGroup[g] || []).length > 0).map((g) => (
             <div key={g} style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -229,8 +233,6 @@ export default function JudgingGroups() {
               </div>
             </div>
           ))}
-
-          {/* Slots not linked to any group */}
           {(demoByGroup['_none'] || []).length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--muted)', marginBottom: 6 }}>Other Slots</div>
@@ -250,7 +252,7 @@ export default function JudgingGroups() {
       {/* ── All groups view (everyone) ── */}
       {groupKeys.length > 0 && (
         <div className="card">
-          <h3 style={{ marginTop: 0, marginBottom: 14 }}>All Groups</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 14 }}>All Demo Groups</h3>
           <div className="grid">
             {groupKeys.map((g) => (
               <div key={g} className="card flat" style={{ border: `2px solid ${gc(g)}`, background: 'var(--surface-2)' }}>
@@ -286,7 +288,9 @@ export default function JudgingGroups() {
       )}
 
       {groupKeys.length === 0 && (
-        <div className="card"><p className="muted">Judging groups haven't been set up yet. The admin will configure this in the Admin panel.</p></div>
+        <div className="card">
+          <p className="muted">Project demo groups haven't been configured yet. The admin will set this up in the Admin panel.</p>
+        </div>
       )}
     </div>
   );

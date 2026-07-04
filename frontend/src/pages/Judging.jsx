@@ -120,8 +120,61 @@ export default function Judging() {
   const byScore = [...projects].sort((a, b) => (b.average_score ?? -1) - (a.average_score ?? -1));
   const byInvestment = [...projects].sort((a, b) => (b.total_investment ?? 0) - (a.total_investment ?? 0));
 
+  const myGroup = jgData?.my_judge_group || null;
+  const jt = jgData?.config?.judge_time_minutes;
+  const pp2 = jgData?.config?.per_project_minutes;
+  const startStr2 = meta.hackathon?.start_time;
+  const groupProjects2 = (myGroup && jgData?.groups?.[myGroup]?.projects) || [];
+
   return (
     <div className="stack">
+      {/* ── Judge Group Projects (shown before tabs when judge has a group) ── */}
+      {myGroup && (
+        <div className="card" style={{ border: `2px solid ${jggc(myGroup)}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 18, color: jggc(myGroup) }}>Judge Group Projects — Group {myGroup}</div>
+              {jgGroupWindow(myGroup, startStr2, jt) && (
+                <div className="small muted" style={{ marginTop: 2 }}>{jgGroupWindow(myGroup, startStr2, jt)}</div>
+              )}
+            </div>
+            <span className="badge" style={{ background: jggc(myGroup) + '22', color: jggc(myGroup), fontWeight: 700, fontSize: 13 }}>
+              {groupProjects2.length} project{groupProjects2.length !== 1 ? 's' : ''} to review
+            </span>
+          </div>
+          {groupProjects2.length === 0 ? (
+            <p className="muted small" style={{ margin: 0 }}>No projects assigned to your group yet.</p>
+          ) : (
+            <div className="stack" style={{ gap: 6 }}>
+              {groupProjects2.map((gp, idx) => {
+                const liveP = projects.find((p) => p.id === gp.id);
+                const slot = jgProjectSlot(myGroup, idx, startStr2, jt, pp2);
+                return (
+                  <div key={gp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 7, gap: 10 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{gp.name}</div>
+                      {slot && <div className="small muted">{slot}</div>}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      {liveP?.my_score != null
+                        ? <span className="badge green">✓ {liveP.my_score}</span>
+                        : <span className="badge amber">to score</span>}
+                      <button
+                        type="button"
+                        style={{ padding: '5px 14px', fontSize: 13 }}
+                        onClick={() => { setView('score'); if (liveP) openProject(liveP); }}
+                      >
+                        Score ↗
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="spread" style={{ flexWrap: 'wrap', gap: 12 }}>
         <h1 style={{ margin: 0 }}>Judging</h1>
         <div className="tabs">

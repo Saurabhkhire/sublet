@@ -303,6 +303,31 @@ export async function migrateLegacy() {
   console.log(`[migrate] done — all existing data moved to "Ziward Hackathon" (id ${hid})`);
 }
 
+// Creates the email_sends table to track which emails have already been sent per user+type.
+export async function migrateEmailSends() {
+  if (isPg) {
+    await run(`CREATE TABLE IF NOT EXISTS email_sends (
+      id SERIAL PRIMARY KEY,
+      hackathon_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      email_type TEXT NOT NULL,
+      sent_at TEXT NOT NULL DEFAULT '',
+      UNIQUE (hackathon_id, user_id, email_type)
+    )`);
+    return;
+  }
+  if (!(await tableExists('email_sends'))) {
+    await run(`CREATE TABLE email_sends (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      hackathon_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      email_type TEXT NOT NULL,
+      sent_at TEXT NOT NULL DEFAULT '',
+      UNIQUE (hackathon_id, user_id, email_type)
+    )`);
+  }
+}
+
 // Adds voice_enabled, submission_deadline, submission_rules, judging_rules to hackathons,
 // and creates the smtp_config table.
 export async function migrateVoiceAndRules() {
