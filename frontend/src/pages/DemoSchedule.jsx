@@ -130,8 +130,9 @@ export default function DemoSchedule() {
   const [elapsed, setElapsed]       = useState(0);
   const [liveStartedAt, setLiveStartedAt] = useState(null);
   const autoStart = meta.hackathon.auto_advance_demo !== 0;
-  const [manualStep, setManualStep] = useState(null); // null | 'speech' | 'timer'
+  const [manualStep, setManualStep] = useState(null); // null | 'speech' | 'timer' | 'outro'
   const [manualText, setManualText] = useState('');
+  const [manualNextId, setManualNextId] = useState(null); // pending slot after outro
 
   const timerRef   = useRef(null);
   const alerted2   = useRef(false);
@@ -233,11 +234,16 @@ export default function DemoSchedule() {
       }
     } else {
       if (cur) await put(`${base}/${cur.id}`, { status: 'completed', actual_end: new Date().toISOString() });
-      // In manual mode with a next slot: still speak the thank-you, then set pending
+      stopTimer();
       if (cur && !wasSkipped && voiceMode !== 'off') {
-        await speakVoice(slotOutroText(cur), voiceMode);
+        // In manual mode: show "Speak Outro" button first, then proceed to pending
+        setManualText(slotOutroText(cur));
+        setManualStep('outro');
+        setManualNextId(next.id);
+        await load();
+        return;
       }
-      stopTimer(); setPendingId(next.id); setCurrentId(null); setElapsed(0);
+      setPendingId(next.id); setCurrentId(null); setElapsed(0);
       await load();
     }
   }
@@ -247,6 +253,15 @@ export default function DemoSchedule() {
     const voiceMode = meta.hackathon.voice_mode || 'off';
     setManualStep('timer');
     if (text && voiceMode !== 'off') await speakVoice(text, voiceMode);
+  }
+
+  async function doManualOutro() {
+    const text = manualText;
+    const nextId = manualNextId;
+    const voiceMode = meta.hackathon.voice_mode || 'off';
+    setManualStep(null); setManualText(''); setManualNextId(null);
+    if (text && voiceMode !== 'off') await speakVoice(text, voiceMode);
+    setPendingId(nextId); setCurrentId(null); setElapsed(0);
   }
 
   function doManualTimer() {
@@ -305,7 +320,15 @@ export default function DemoSchedule() {
     }
   }
 
-  const times = calcTimes(slots, meta.hackathon?.start_time);
+  // When live, anchor the schedule to the actual clock time the event started.
+  // When not live, use the hackathon's configured start_time (tentative).
+  const liveBase = (isLive && liveStartedAt)
+    ? (() => { const d = new Date(liveStartedAt); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; })()
+    : null;
+  const times = calcTimes(
+    isLive ? slots.map((s) => ({ ...s, scheduled_start: '' })) : slots,
+    liveBase ?? (meta.hackathon?.start_time || ''),
+  );
   // Build a quick lookup: slot.id → display time
   const slotTimeMap = {};
   slots.forEach((s, i) => { slotTimeMap[s.id] = times[i]; });
@@ -447,9 +470,9 @@ export default function DemoSchedule() {
           <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.08em' }}>
             🎬 Now Presenting
           </div>
-          <div style={{ fontSize: 26, fontWeight: 800, marginBottom: 2 }}>{slotName(cur)}</div>
-          {cur.team && cur.team.length > 0 && (
-            <div style={{ fontSize: 14, opacity: 0.85, marginBottom: 6 }}>{cur.team.join(', ')}</div>
+          <div style={{ fontSize: 26, fontWeight: 800, marginBottom: 2 }}>{cur.project_name || slotName(cur)}</div>
+          {cur.custom_name && cur.project_name && (
+            <div style={{ fontSize: 15, opacity: 0.85, marginBottom: 6 }}>{cur.custom_name}</div>
           )}
           {cur.project_award && (
             <div style={{ display: 'inline-block', background: 'rgba(255,255,255,.2)', borderRadius: 6, padding: '2px 10px', fontSize: 13, marginBottom: 8 }}>
@@ -464,6 +487,9 @@ export default function DemoSchedule() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
               {manualStep === 'speech' && (
                 <button style={{ ...B_SM, padding: '7px 18px', fontSize: 14 }} onClick={doManualSpeech}>🎙 Speak Intro</button>
+              )}
+              {manualStep === 'outro' && (
+                <button style={{ ...B_SM, padding: '7px 18px', fontSize: 14, background: '#16a34a' }} onClick={doManualOutro}>🎙 Thank You</button>
               )}
               {manualStep === 'timer' && (
                 <button style={{ ...B_SM, padding: '7px 18px', fontSize: 14 }} onClick={doManualTimer}>▶ Start Timer</button>
@@ -484,8 +510,8 @@ export default function DemoSchedule() {
       {isLive && !cur && pend && (
         <div style={{ padding: 16, borderRadius: 10, border: '2px solid var(--accent)', background: 'var(--surface)' }}>
           <div className="faint small" style={{ textTransform: 'uppercase', marginBottom: 4 }}>On Deck</div>
-          <div style={{ fontWeight: 700, fontSize: 18 }}>{slotName(pend)}</div>
-          {pend.team && pend.team.length > 0 && <div className="small muted">{pend.team.join(', ')}</div>}
+          <div style={{ fontWeight: 700, fontSize: 18 }}>{pend.project_name || slotName(pend)}</div>
+          {pend.custom_name && pend.project_name && <div className="small muted">{pend.custom_name}</div>}
           {isAdmin && <button style={{ ...B_SM, marginTop: 10 }} onClick={startPending}>▶ Start Now</button>}
         </div>
       )}
@@ -537,15 +563,15 @@ export default function DemoSchedule() {
               </div>
               <div>
                 <div style={{ fontWeight: isCurrent ? 700 : 500, fontSize: 14 }}>
-                  {slotName(s)}
+                  {s.project_name || slotName(s)}
                   {s.project_award && (
                     <span style={{ marginLeft: 8, fontSize: 11, padding: '1px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff' }}>
                       {s.project_award}
                     </span>
                   )}
                 </div>
-                {s.team && s.team.length > 0 && (
-                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{s.team.join(', ')}</div>
+                {s.custom_name && s.project_name && (
+                  <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{s.custom_name}</div>
                 )}
                 {st.label && (
                   <div style={{ fontSize: 11, color: st.color, fontWeight: st.bold ? 700 : 400, marginTop: 2 }}>{st.label}</div>

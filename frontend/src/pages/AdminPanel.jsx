@@ -583,7 +583,7 @@ function SpeakersSection({ hid }) {
 
       {/* ── Column headers ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 1fr 55px 70px auto', gap: 6, padding: '4px 10px', marginBottom: 2 }}>
-        {['Start (opt.)', 'Segment / Topic', 'Speaker', 'What happens', 'Min', 'Break after ☕', ''].map((h) => (
+        {['Start (opt.)', 'Role', 'Speaker', 'Topic', 'Min', 'Break after ☕', ''].map((h) => (
           <div key={h} className="faint" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.07em' }}>{h}</div>
         ))}
       </div>
@@ -591,9 +591,9 @@ function SpeakersSection({ hid }) {
       {/* ── Add row ── */}
       <form onSubmit={addSpeaker} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 1fr 55px 70px auto', gap: 6, marginBottom: 12, alignItems: 'center' }}>
         <input type="time" value={add.time}      onChange={(e) => setAdd({ ...add, time: e.target.value })}      style={{ fontSize: 13, padding: '5px 6px' }} />
-        <input placeholder="Opening remarks…"    value={add.segment}    onChange={(e) => setAdd({ ...add, segment: e.target.value })}    style={{ fontSize: 13 }} />
+        <input placeholder="Keynote, Workshop…"   value={add.segment}    onChange={(e) => setAdd({ ...add, segment: e.target.value })}    style={{ fontSize: 13 }} />
         <input placeholder="Alice Smith"         value={add.speaker}    onChange={(e) => setAdd({ ...add, speaker: e.target.value })}    style={{ fontSize: 13 }} />
-        <input placeholder="Keynote talk on AI…" value={add.notes}      onChange={(e) => setAdd({ ...add, notes: e.target.value })}      style={{ fontSize: 13 }} />
+        <input placeholder="AI trends in 2026…" value={add.notes}      onChange={(e) => setAdd({ ...add, notes: e.target.value })}      style={{ fontSize: 13 }} />
         <input type="number" min={1} max={300}   value={add.duration}   onChange={(e) => setAdd({ ...add, duration: e.target.value })}   style={{ fontSize: 13, padding: '5px 4px' }} />
         <input type="number" min={0} max={120} placeholder="0 min" value={add.breakAfter} onChange={(e) => setAdd({ ...add, breakAfter: e.target.value })} style={{ fontSize: 13, padding: '5px 4px' }} />
         <button type="submit" style={spBtn} disabled={addBusy || (!add.speaker.trim() && !add.segment.trim())}>
