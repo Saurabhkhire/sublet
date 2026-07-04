@@ -114,9 +114,7 @@ export default function DemoSchedule() {
   const [pendingId, setPendingId]   = useState(null);
   const [elapsed, setElapsed]       = useState(0);
   const [liveStartedAt, setLiveStartedAt] = useState(null);
-  const [autoStart, setAutoStart]   = useState(() => {
-    try { return localStorage.getItem('demoAutoStart') !== 'false'; } catch { return true; }
-  });
+  const autoStart = meta.hackathon.auto_advance_demo !== 0;
 
   const timerRef   = useRef(null);
   const alerted2   = useRef(false);
@@ -249,12 +247,129 @@ export default function DemoSchedule() {
     }
   }
 
-  function handleAutoStart(v) {
-    setAutoStart(v);
-    try { localStorage.setItem('demoAutoStart', v ? 'true' : 'false'); } catch (_) {}
+  const times = calcTimes(slots, meta.hackathon?.start_time);
+  // Build a quick lookup: slot.id → display time
+  const slotTimeMap = {};
+  slots.forEach((s, i) => { slotTimeMap[s.id] = times[i]; });
+
+  // ── Non-admin read-only view (participants & judges) ──────────────────────
+  if (!isAdmin) {
+    const myEmail = user?.email || '';
+    const liveSlot = slots.find((s) => s.status === 'speaking');
+
+    // Group by project's judge_group
+    const groupMap = {};
+    slots.forEach((s) => {
+      const g = s.project_judge_group || '—';
+      if (!groupMap[g]) groupMap[g] = [];
+      groupMap[g].push(s);
+    });
+    const groupKeys = Object.keys(groupMap).sort((a, b) => {
+      if (a === '—') return 1;
+      if (b === '—') return -1;
+      return a.localeCompare(b);
+    });
+    const myGroupKey = groupKeys.find((g) => groupMap[g].some((s) => (s.team || []).includes(myEmail)));
+
+    return (
+      <div className="stack">
+        <h1 style={{ marginBottom: 4 }}>🎬 Demo Day Schedule</h1>
+
+        {/* Now Presenting banner */}
+        {liveSlot && (
+          <div style={{ padding: 18, borderRadius: 12, background: 'var(--accent)', color: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,.16)' }}>
+            <div style={{ fontSize: 12, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>🎬 Now Presenting</div>
+            <div style={{ fontSize: 22, fontWeight: 800 }}>{slotName(liveSlot)}</div>
+            {liveSlot.team?.length > 0 && (
+              <div style={{ fontSize: 13, opacity: 0.85, marginTop: 4 }}>{liveSlot.team.join(', ')}</div>
+            )}
+            {liveSlot.project_award && (
+              <div style={{ display: 'inline-block', marginTop: 6, background: 'rgba(255,255,255,.2)', borderRadius: 6, padding: '2px 10px', fontSize: 12 }}>
+                {liveSlot.project_award}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Your group highlight */}
+        {myGroupKey && (
+          <div style={{ padding: 16, borderRadius: 10, border: '2px solid var(--accent)', background: 'var(--surface)' }}>
+            <div className="faint small" style={{ marginBottom: 2 }}>Your group</div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Group {myGroupKey}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {groupMap[myGroupKey].map((s, i) => {
+                const isMe = (s.team || []).includes(myEmail);
+                const st = STATUS[s.status] || STATUS.scheduled;
+                return (
+                  <div key={s.id} style={{
+                    display: 'flex', gap: 12, alignItems: 'center',
+                    padding: '8px 0',
+                    borderTop: i > 0 ? '1px solid var(--border)' : 'none',
+                    background: isMe ? 'rgba(99,102,241,.04)' : 'transparent',
+                  }}>
+                    <div style={{ minWidth: 58, color: 'var(--muted)', fontSize: 12, textAlign: 'right' }}>
+                      <div>{slotTimeMap[s.id] || '—'}</div>
+                      <div style={{ fontSize: 11 }}>{s.duration_minutes} min</div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: isMe ? 700 : 500, color: isMe ? 'var(--accent)' : 'inherit' }}>
+                        {slotName(s)}
+                        {isMe && <span style={{ marginLeft: 8, fontSize: 11, padding: '1px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff' }}>Your team</span>}
+                      </div>
+                      {st.label && <div style={{ fontSize: 11, color: st.color, marginTop: 1 }}>{st.label}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Full schedule grouped by judge group */}
+        {groupKeys.length === 0 ? (
+          <div className="card"><p className="faint small">No demo schedule published yet.</p></div>
+        ) : (
+          groupKeys.map((groupKey) => (
+            <div key={groupKey} className="card" style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', fontWeight: 700, fontSize: 14 }}>
+                {groupKey === '—' ? 'Unassigned' : `Group ${groupKey}`}
+              </div>
+              {groupMap[groupKey].map((s, i) => {
+                const isMe = (s.team || []).includes(myEmail);
+                const st = STATUS[s.status] || STATUS.scheduled;
+                return (
+                  <div key={s.id} style={{
+                    display: 'flex', gap: 12, alignItems: 'center',
+                    padding: '10px 16px',
+                    borderBottom: i < groupMap[groupKey].length - 1 ? '1px solid var(--border)' : 'none',
+                    background: isMe ? 'rgba(99,102,241,.06)' : s.status === 'speaking' ? 'rgba(99,102,241,.04)' : 'transparent',
+                    borderLeft: isMe ? '4px solid var(--accent)' : s.status === 'speaking' ? '4px solid var(--accent)' : '4px solid transparent',
+                  }}>
+                    <div style={{ minWidth: 58, color: 'var(--muted)', fontSize: 12, textAlign: 'right' }}>
+                      <div>{slotTimeMap[s.id] || '—'}</div>
+                      <div style={{ fontSize: 11 }}>{s.duration_minutes} min</div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: isMe ? 700 : 500 }}>
+                        {slotName(s)}
+                        {isMe && <span style={{ marginLeft: 8, fontSize: 11, padding: '1px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff' }}>Your team</span>}
+                        {s.project_award && <span style={{ marginLeft: 6, fontSize: 11, padding: '1px 6px', borderRadius: 4, background: '#d97706', color: '#fff' }}>{s.project_award}</span>}
+                      </div>
+                      {s.team?.length > 0 && (
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{s.team.join(', ')}</div>
+                      )}
+                      {st.label && <div style={{ fontSize: 11, color: st.color, fontWeight: st.bold ? 700 : 400, marginTop: 1 }}>{st.label}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))
+        )}
+      </div>
+    );
   }
 
-  const times = calcTimes(slots, meta.hackathon?.start_time);
   const cur = currentSlot();
   const pend = pendingSlot();
   const onDeckSlot = !cur && pend ? pend : slots.filter(isEligible).find((s) => s.id !== currentId && s.id !== pendingId) || null;
@@ -325,10 +440,6 @@ export default function DemoSchedule() {
               await load();
             }}>↺ Reset All</button>
           )}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-            <input type="checkbox" checked={autoStart} onChange={(e) => handleAutoStart(e.target.checked)} />
-            Auto-advance to next demo
-          </label>
         </div>
       )}
 

@@ -139,9 +139,7 @@ export default function Schedule() {
   const [pendingId, setPendingId]   = useState(null); // on-deck: advanced but timer not started yet
   const [elapsed, setElapsed]       = useState(0);
   const [liveStartedAt, setLiveStartedAt] = useState(null);
-  const [autoStart, setAutoStart]   = useState(() => {
-    try { return localStorage.getItem('schedAutoStart') !== 'false'; } catch { return true; }
-  });
+  const autoStart = meta.hackathon.auto_stop_speaker !== 0;
 
   const timerRef      = useRef(null);
   const alerted2      = useRef(false);
@@ -396,15 +394,6 @@ export default function Schedule() {
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 20, background: '#dc2626', color: '#fff', fontWeight: 700, fontSize: 13 }}>
               ● LIVE
             </span>
-          )}
-          {isAdmin && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
-              <input type="checkbox" checked={autoStart} onChange={() => {
-                const n = !autoStart; setAutoStart(n);
-                try { localStorage.setItem('schedAutoStart', String(n)); } catch {}
-              }} />
-              Auto-start next speaker
-            </label>
           )}
           {canStart    && <button style={B} onClick={startEvent}>▶ Start Event</button>}
           {canRestart  && <button style={B_GRY} onClick={restartEvent}>↺ Run Again</button>}

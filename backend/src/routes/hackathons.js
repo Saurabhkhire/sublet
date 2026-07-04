@@ -64,7 +64,7 @@ router.put('/:hid', hackathonContext, adminOnly, async (req, res) => {
   const name = (req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Hackathon name is required' });
   await run(
-    'UPDATE hackathons SET name = ?, details = ?, support_info = ?, schedule = ?, event_date = ?, start_time = ?, end_time = ?, location = ?, voice_enabled = ?, submission_deadline = ?, submission_rules = ?, judging_rules = ?, voice_mode = ? WHERE id = ?',
+    'UPDATE hackathons SET name = ?, details = ?, support_info = ?, schedule = ?, event_date = ?, start_time = ?, end_time = ?, location = ?, voice_enabled = ?, submission_deadline = ?, submission_rules = ?, judging_rules = ?, voice_mode = ?, auto_stop_speaker = ?, auto_advance_demo = ? WHERE id = ?',
     [
       name,
       req.body?.details || '',
@@ -79,6 +79,8 @@ router.put('/:hid', hackathonContext, adminOnly, async (req, res) => {
       req.body?.submission_rules || '',
       req.body?.judging_rules || '',
       req.body?.voice_mode || 'off',
+      req.body?.auto_stop_speaker === false ? 0 : 1,
+      req.body?.auto_advance_demo === false ? 0 : 1,
       req.hackathonId,
     ]
   );

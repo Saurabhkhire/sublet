@@ -33,6 +33,7 @@ function DetailsSection({ hid, meta, reload }) {
     name: h.name, details: h.details, support_info: h.support_info || '', schedule: h.schedule || '',
     event_date: h.event_date || '', start_time: h.start_time || '', end_time: h.end_time || '', location: h.location || '',
     voice_mode: h.voice_mode || 'off', submission_deadline: h.submission_deadline || '',
+    auto_stop_speaker: h.auto_stop_speaker !== 0, auto_advance_demo: h.auto_advance_demo !== 0,
   });
   const [msg, setMsg] = useState('');
   async function save(e) {
@@ -69,6 +70,16 @@ function DetailsSection({ hid, meta, reload }) {
             <option value="female">Female voice</option>
           </select>
         </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2, marginBottom: 6 }}>
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 0 }}>
+            <input type="checkbox" checked={!!form.auto_stop_speaker} onChange={(e) => set('auto_stop_speaker', e.target.checked)} style={{ width: 'auto', margin: 0 }} />
+            <span>Auto-start next speaker when current finishes <span className="faint small">(Speaker Schedule)</span></span>
+          </label>
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 0 }}>
+            <input type="checkbox" checked={!!form.auto_advance_demo} onChange={(e) => set('auto_advance_demo', e.target.checked)} style={{ width: 'auto', margin: 0 }} />
+            <span>Auto-advance to next demo when current finishes <span className="faint small">(Demo Day)</span></span>
+          </label>
+        </div>
         <label>Location
           <input value={form.location} onChange={(e) => set('location', e.target.value)} placeholder="Venue address or online link" />
         </label>

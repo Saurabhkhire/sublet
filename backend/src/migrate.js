@@ -304,6 +304,8 @@ export async function migrateVoiceAndRules() {
   if (isPg) {
     await run("ALTER TABLE hackathons ADD COLUMN IF NOT EXISTS voice_enabled INTEGER NOT NULL DEFAULT 0");
     await run("ALTER TABLE hackathons ADD COLUMN IF NOT EXISTS voice_mode TEXT NOT NULL DEFAULT 'off'");
+    await run("ALTER TABLE hackathons ADD COLUMN IF NOT EXISTS auto_stop_speaker INTEGER NOT NULL DEFAULT 1");
+    await run("ALTER TABLE hackathons ADD COLUMN IF NOT EXISTS auto_advance_demo INTEGER NOT NULL DEFAULT 1");
     await run("ALTER TABLE hackathons ADD COLUMN IF NOT EXISTS submission_deadline TEXT NOT NULL DEFAULT ''");
     await run("ALTER TABLE hackathons ADD COLUMN IF NOT EXISTS submission_rules TEXT NOT NULL DEFAULT ''");
     await run("ALTER TABLE hackathons ADD COLUMN IF NOT EXISTS judging_rules TEXT NOT NULL DEFAULT ''");
@@ -326,6 +328,8 @@ export async function migrateVoiceAndRules() {
   };
   await add('hackathons', 'voice_enabled', 'INTEGER NOT NULL DEFAULT 0');
   await add('hackathons', 'voice_mode', "TEXT NOT NULL DEFAULT 'off'");
+  await add('hackathons', 'auto_stop_speaker', 'INTEGER NOT NULL DEFAULT 1');
+  await add('hackathons', 'auto_advance_demo', 'INTEGER NOT NULL DEFAULT 1');
   await add('hackathons', 'submission_deadline', "TEXT NOT NULL DEFAULT ''");
   await add('hackathons', 'submission_rules', "TEXT NOT NULL DEFAULT ''");
   await add('hackathons', 'judging_rules', "TEXT NOT NULL DEFAULT ''");
