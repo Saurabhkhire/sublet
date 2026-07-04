@@ -142,8 +142,10 @@ export async function migrateJudgingGroups() {
       judge_time_minutes INTEGER NOT NULL DEFAULT 60,
       per_project_minutes INTEGER NOT NULL DEFAULT 5,
       group_count INTEGER NOT NULL DEFAULT 0,
-      assigned_at TEXT NOT NULL DEFAULT ''
+      assigned_at TEXT NOT NULL DEFAULT '',
+      auto_assign_stopped INTEGER NOT NULL DEFAULT 0
     )`);
+    await run("ALTER TABLE judging_config ADD COLUMN IF NOT EXISTS auto_assign_stopped INTEGER NOT NULL DEFAULT 0");
     return;
   }
   const addCol = async (table, col, type) => {
@@ -162,8 +164,11 @@ export async function migrateJudgingGroups() {
       judge_time_minutes INTEGER NOT NULL DEFAULT 60,
       per_project_minutes INTEGER NOT NULL DEFAULT 5,
       group_count INTEGER NOT NULL DEFAULT 0,
-      assigned_at TEXT NOT NULL DEFAULT ''
+      assigned_at TEXT NOT NULL DEFAULT '',
+      auto_assign_stopped INTEGER NOT NULL DEFAULT 0
     )`);
+  } else {
+    await addCol('judging_config', 'auto_assign_stopped', 'INTEGER NOT NULL DEFAULT 0');
   }
 }
 

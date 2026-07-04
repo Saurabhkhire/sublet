@@ -76,7 +76,10 @@ export default function JudgingGroups() {
     setBusy(true); setMsg(''); setError('');
     try {
       const r = await post(`/api/hackathons/${hid}/judging-groups/attend`);
-      setMsg(r.already ? `You're already in Group ${r.group}.` : `Checked in! You're in Group ${r.group}.`);
+      if (r.pending && r.already) setMsg("You're already checked in. You'll be placed in a group once groups are assigned.");
+      else if (r.pending) setMsg("Checked in! You'll be placed in a group once the admin assigns groups.");
+      else if (r.already) setMsg(`You're already in Group ${r.group}.`);
+      else setMsg(`Checked in! You're in Group ${r.group}.`);
       await load();
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
@@ -132,11 +135,12 @@ export default function JudgingGroups() {
       {/* ── Judge: self-attend button + group info ── */}
       {isJudge && !isAdmin && (
         <div className="card">
-          <div className="small faint" style={{ textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Your Judge Assignment</div>
+          <div className="small faint" style={{ textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>Your Judge Schedule</div>
           {data.my_judge_group ? (
             <>
-              <div style={{ marginBottom: 8 }}>
-                You are in <strong style={{ color: gc(data.my_judge_group), fontSize: 18 }}>Group {data.my_judge_group}</strong>
+              <div style={{ marginBottom: 12 }}>
+                You are in{' '}
+                <strong style={{ color: gc(data.my_judge_group), fontSize: 20 }}>Group {data.my_judge_group}</strong>
                 {groupWindow(data.my_judge_group, startStr, jt) && (
                   <span className="muted"> · {groupWindow(data.my_judge_group, startStr, jt)}</span>
                 )}
@@ -160,12 +164,19 @@ export default function JudgingGroups() {
                 </div>
               )}
             </>
+          ) : data.my_judge_attended ? (
+            <div style={{ padding: '10px 14px', background: '#fef9c3', borderRadius: 8, border: '1px solid #fde68a' }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>✓ You are checked in</div>
+              <div className="muted small">You'll be placed in a judging group once the admin assigns groups. Check back soon.</div>
+            </div>
           ) : (
             <div>
               <p className="muted" style={{ marginBottom: 10 }}>
-                {assigned ? 'Mark your attendance to receive your group assignment.' : 'The admin has not assigned groups yet.'}
+                {assigned
+                  ? 'Mark your attendance to receive your group assignment.'
+                  : 'Check in now — you\'ll be placed in a group once the admin assigns groups.'}
               </p>
-              <button onClick={attend} disabled={busy || !assigned}>
+              <button onClick={attend} disabled={busy}>
                 {busy ? 'Processing…' : '✓ Mark My Attendance'}
               </button>
             </div>

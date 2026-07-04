@@ -760,7 +760,27 @@ function JudgeAssignmentSection({ hid }) {
     setBusy(true); setMsg(''); setError('');
     try {
       const r = await post(base + '/assign');
-      setMsg(`Assigned ${r.projects_assigned} project(s) into ${r.group_count} group(s).`);
+      let m = `Assigned ${r.projects_assigned} project(s) into ${r.group_count} group(s).`;
+      if (r.judges_assigned > 0) m += ` Also assigned ${r.judges_assigned} pre-checked-in judge(s).`;
+      setMsg(m);
+      await load();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+
+  async function resetAll() {
+    if (!confirm('Reset ALL assignments? This will clear every judge group, project group, and attendance. Cannot be undone.')) return;
+    setBusy(true); setMsg(''); setError('');
+    try {
+      await post(base + '/reset');
+      setMsg('Reset complete — all assignments cleared.');
+      await load();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+
+  async function toggleAutoAssign() {
+    setBusy(true); setError('');
+    try {
+      await post(base + '/toggle-auto');
       await load();
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
@@ -768,7 +788,7 @@ function JudgeAssignmentSection({ hid }) {
   async function toggleAttend(j) {
     setBusy(true); setError('');
     try {
-      if (j.judge_group) {
+      if (j.attended_at) {
         await del(`${base}/attend/${j.user_id}`);
       } else {
         await post(`${base}/attend/${j.user_id}`);
@@ -780,6 +800,7 @@ function JudgeAssignmentSection({ hid }) {
   const ppg = data?.projects_per_group || 0;
   const need = data?.group_count_needed || 0;
   const assigned = data?.config?.assigned_at;
+  const stopped = data?.auto_assign_stopped;
   const groupKeys = data?.groups ? Object.keys(data.groups).sort() : [];
   const total = groupKeys.reduce((a, k) => a + data.groups[k].projects.length, 0) + (data?.unassigned_projects || 0);
 
@@ -809,46 +830,66 @@ function JudgeAssignmentSection({ hid }) {
             → {ppg} project(s) per group · {need} group(s) needed for {total} project(s) total
           </div>
         )}
-        <div className="row" style={{ gap: 10, marginTop: 8 }}>
+        <div className="row" style={{ gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
           <button type="submit" disabled={busy}>Save params</button>
           <button type="button" className="outline" onClick={assign} disabled={busy}>
             {assigned ? '↺ Re-assign Groups' : '▶ Assign Groups'}
           </button>
+          {assigned && (
+            <>
+              <button type="button" className="outline" onClick={toggleAutoAssign} disabled={busy}
+                style={{ color: stopped ? '#16a34a' : '#dc2626', borderColor: stopped ? '#16a34a' : '#dc2626' }}>
+                {stopped ? '▶ Resume Auto-assign' : '⏸ Stop Auto-assign'}
+              </button>
+              <button type="button" className="outline" onClick={resetAll} disabled={busy}
+                style={{ color: '#dc2626', borderColor: '#dc2626' }}>
+                ↺ Reset All
+              </button>
+            </>
+          )}
           {msg && <span className="success small">{msg}</span>}
         </div>
       </form>
+
       {assigned && (
-        <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--surface-2)', borderRadius: 6 }}>
+        <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--surface-2)', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ color: 'var(--green,#16a34a)', fontSize: 13 }}>✓ Groups assigned</span>
-          <span className="muted small"> · {groupKeys.length} group(s) · {data?.all_judges?.filter((j) => j.judge_group).length || 0} / {data?.all_judges?.length || 0} judges checked in</span>
+          <span className="muted small">{groupKeys.length} group(s) · {data?.all_judges?.filter((j) => j.judge_group).length || 0} / {data?.all_judges?.length || 0} judges placed · {data?.all_judges?.filter((j) => j.attended_at && !j.judge_group).length || 0} awaiting group</span>
+          {stopped ? (
+            <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4, background: '#fef2f2', color: '#dc2626', fontWeight: 600 }}>⏸ Auto-assign paused</span>
+          ) : (
+            <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4, background: '#f0fdf4', color: '#16a34a', fontWeight: 600 }}>● Auto-assigning new joins</span>
+          )}
         </div>
       )}
 
       {/* ── Judge attendance list ── */}
       <div style={{ marginTop: 18 }}>
-        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Judge Attendance</div>
-        {!assigned && <p className="muted small" style={{ marginTop: 0, marginBottom: 8 }}>Assign groups first to enable attendance check-in.</p>}
+        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
+          Judge Attendance
+          {!assigned && <span className="faint" style={{ fontWeight: 400, marginLeft: 6 }}>— judges can check in now; groups assigned when you press ▶ Assign Groups</span>}
+        </div>
         {(data?.all_judges || []).length === 0
           ? <p className="faint small">No judges added yet — add them in the Judges section above.</p>
           : (
             <div className="stack" style={{ gap: 5 }}>
               {(data.all_judges).map((j) => (
-                <label key={j.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 7, cursor: assigned ? 'pointer' : 'default', margin: 0 }}>
+                <label key={j.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 7, cursor: 'pointer', margin: 0 }}>
                   <input
                     type="checkbox"
-                    checked={!!j.judge_group}
-                    disabled={busy || !assigned}
+                    checked={!!j.attended_at}
+                    disabled={busy}
                     onChange={() => toggleAttend(j)}
                     style={{ width: 17, height: 17, flexShrink: 0 }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    {j.name && j.name !== j.email
-                      ? <><div style={{ fontWeight: 500, fontSize: 13 }}>{j.name}</div><div className="small muted">{j.email}</div></>
-                      : <div style={{ fontSize: 13 }}>{j.email}</div>}
+                    <div style={{ fontSize: 13 }}>{j.email}</div>
                   </div>
                   {j.judge_group
                     ? <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 5, background: jagc(j.judge_group), color: '#fff', fontWeight: 700, flexShrink: 0 }}>Group {j.judge_group}</span>
-                    : <span className="badge" style={{ fontSize: 11, flexShrink: 0 }}>not checked in</span>}
+                    : j.attended_at
+                      ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#fef9c3', color: '#854d0e', fontWeight: 600, flexShrink: 0 }}>✓ Present · awaiting group</span>
+                      : <span className="badge" style={{ fontSize: 11, flexShrink: 0 }}>not checked in</span>}
                 </label>
               ))}
             </div>

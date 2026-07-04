@@ -9,16 +9,19 @@ const LABELS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
 function labelForIndex(i) { return LABELS[i] || `G${i + 1}`; }
 
+async function getConfig(hackathonId) {
+  return await get('SELECT * FROM judging_config WHERE hackathon_id = ?', [hackathonId])
+    || { judge_time_minutes: 60, per_project_minutes: 5, group_count: 0, assigned_at: '', auto_assign_stopped: 0 };
+}
+
 // ── GET / — config + full group map
 router.get('/', async (req, res) => {
-  const config = await get('SELECT * FROM judging_config WHERE hackathon_id = ?', [req.hackathonId])
-    || { judge_time_minutes: 60, per_project_minutes: 5, group_count: 0, assigned_at: '' };
+  const config = await getConfig(req.hackathonId);
 
   const projects = await all(
     'SELECT id, name, judge_group, award_tag FROM projects WHERE hackathon_id = ? ORDER BY id',
     [req.hackathonId]
   );
-  // Attach team emails (separate query avoids GROUP_CONCAT / STRING_AGG dialect differences)
   for (const p of projects) {
     const members = await all(
       'SELECT u.email FROM project_participants pp JOIN users u ON u.id = pp.user_id WHERE pp.project_id = ?',
@@ -56,8 +59,6 @@ router.get('/', async (req, res) => {
   }
 
   const myJudge = judges.find((j) => j.user_id === req.user.id);
-
-  // Participant's project group
   const myProject = projects.find((p) =>
     (p.team_emails || '').split(',').includes(req.user.email)
   );
@@ -67,11 +68,17 @@ router.get('/', async (req, res) => {
     projects_per_group,
     group_count_needed,
     groups,
-    all_judges: judges.map((j) => ({ user_id: j.user_id, email: j.email, judge_group: j.judge_group, attended_at: j.attended_at })),
+    all_judges: judges.map((j) => ({
+      user_id: j.user_id,
+      email: j.email,
+      judge_group: j.judge_group,
+      attended_at: j.attended_at,
+    })),
     unassigned_projects: projects.filter((p) => !p.judge_group).length,
     my_judge_group: myJudge?.judge_group || null,
     my_judge_attended: !!myJudge?.attended_at,
     my_project: myProject ? { id: myProject.id, name: myProject.name, judge_group: myProject.judge_group } : null,
+    auto_assign_stopped: config.auto_assign_stopped || 0,
   });
 });
 
@@ -90,15 +97,16 @@ router.put('/config', adminOnly, async (req, res) => {
       per_project_minutes: pp,
       group_count: 0,
       assigned_at: '',
+      auto_assign_stopped: 0,
     });
   }
   res.json({ ok: true });
 });
 
-// ── POST /assign — round-robin all projects into groups (admin)
+// ── POST /assign — round-robin all projects into groups + assign any pre-attended judges (admin)
 router.post('/assign', adminOnly, async (req, res) => {
-  const config = await get('SELECT * FROM judging_config WHERE hackathon_id = ?', [req.hackathonId]);
-  if (!config) return res.status(400).json({ error: 'Save judging params first' });
+  const config = await getConfig(req.hackathonId);
+  if (!config.judge_time_minutes) return res.status(400).json({ error: 'Save judging params first' });
 
   const ppg = Math.floor(config.judge_time_minutes / config.per_project_minutes);
   if (ppg < 1) return res.status(400).json({ error: 'Projects per group < 1 — adjust params' });
@@ -109,13 +117,57 @@ router.post('/assign', adminOnly, async (req, res) => {
   for (let i = 0; i < projects.length; i++) {
     await run('UPDATE projects SET judge_group = ? WHERE id = ?', [labelForIndex(i % gc), projects[i].id]);
   }
-  await run('UPDATE judging_config SET group_count = ?, assigned_at = ? WHERE hackathon_id = ?',
-    [gc, new Date().toISOString(), req.hackathonId]);
+  await run(
+    'UPDATE judging_config SET group_count = ?, assigned_at = ?, auto_assign_stopped = 0 WHERE hackathon_id = ?',
+    [gc, new Date().toISOString(), req.hackathonId]
+  );
 
-  res.json({ ok: true, group_count: gc, projects_assigned: projects.length });
+  // Also assign any judges who checked in before groups were set up
+  const pendingJudges = await all(
+    "SELECT user_id FROM hackathon_judges WHERE hackathon_id = ? AND attended_at != '' AND judge_group = '' ORDER BY attended_at",
+    [req.hackathonId]
+  );
+  let assignedCount = 0;
+  for (const j of pendingJudges) {
+    const alreadyIn = await all(
+      "SELECT judge_group FROM hackathon_judges WHERE hackathon_id = ? AND judge_group != '' ORDER BY attended_at",
+      [req.hackathonId]
+    );
+    const group = labelForIndex(alreadyIn.length % gc);
+    await run('UPDATE hackathon_judges SET judge_group = ? WHERE hackathon_id = ? AND user_id = ?',
+      [group, req.hackathonId, j.user_id]);
+    assignedCount++;
+  }
+
+  res.json({ ok: true, group_count: gc, projects_assigned: projects.length, judges_assigned: assignedCount });
 });
 
-// ── POST /attend — judge marks attendance, gets assigned a group
+// ── POST /reset — wipe all assignments (admin)
+router.post('/reset', adminOnly, async (req, res) => {
+  await run("UPDATE hackathon_judges SET judge_group = '', attended_at = '' WHERE hackathon_id = ?", [req.hackathonId]);
+  await run("UPDATE projects SET judge_group = '' WHERE hackathon_id = ?", [req.hackathonId]);
+  const existing = await get('SELECT id FROM judging_config WHERE hackathon_id = ?', [req.hackathonId]);
+  if (existing) {
+    await run(
+      "UPDATE judging_config SET group_count = 0, assigned_at = '', auto_assign_stopped = 0 WHERE hackathon_id = ?",
+      [req.hackathonId]
+    );
+  }
+  res.json({ ok: true });
+});
+
+// ── POST /toggle-auto — stop or resume auto-assignment of new judges/projects (admin)
+router.post('/toggle-auto', adminOnly, async (req, res) => {
+  const config = await getConfig(req.hackathonId);
+  const stopped = config.auto_assign_stopped ? 0 : 1;
+  const existing = await get('SELECT id FROM judging_config WHERE hackathon_id = ?', [req.hackathonId]);
+  if (existing) {
+    await run('UPDATE judging_config SET auto_assign_stopped = ? WHERE hackathon_id = ?', [stopped, req.hackathonId]);
+  }
+  res.json({ ok: true, auto_assign_stopped: stopped });
+});
+
+// ── POST /attend — judge marks attendance, gets assigned a group if one is available
 router.post('/attend', async (req, res) => {
   const judge = await get(
     'SELECT * FROM hackathon_judges WHERE hackathon_id = ? AND user_id = ?',
@@ -123,9 +175,17 @@ router.post('/attend', async (req, res) => {
   );
   if (!judge) return res.status(403).json({ error: 'You are not a judge for this hackathon' });
   if (judge.judge_group) return res.json({ group: judge.judge_group, already: true });
+  if (judge.attended_at) return res.json({ group: null, pending: true, already: true });
 
-  const config = await get('SELECT * FROM judging_config WHERE hackathon_id = ?', [req.hackathonId]);
-  if (!config || config.group_count < 1) return res.status(400).json({ error: 'Groups have not been assigned yet' });
+  const config = await getConfig(req.hackathonId);
+  const now = new Date().toISOString();
+
+  if (!config.assigned_at || config.group_count < 1 || config.auto_assign_stopped) {
+    // No groups yet or auto-assign paused — mark attendance, assign group later
+    await run('UPDATE hackathon_judges SET attended_at = ? WHERE hackathon_id = ? AND user_id = ?',
+      [now, req.hackathonId, req.user.id]);
+    return res.json({ ok: true, group: null, pending: true });
+  }
 
   const attended = await all(
     "SELECT judge_group FROM hackathon_judges WHERE hackathon_id = ? AND judge_group != '' ORDER BY attended_at",
@@ -134,7 +194,7 @@ router.post('/attend', async (req, res) => {
   const group = labelForIndex(attended.length % config.group_count);
 
   await run('UPDATE hackathon_judges SET judge_group = ?, attended_at = ? WHERE hackathon_id = ? AND user_id = ?',
-    [group, new Date().toISOString(), req.hackathonId, req.user.id]);
+    [group, now, req.hackathonId, req.user.id]);
 
   res.json({ ok: true, group });
 });
@@ -146,8 +206,14 @@ router.post('/attend/:userId', adminOnly, async (req, res) => {
   if (!judge) return res.status(404).json({ error: 'Judge not found' });
   if (judge.judge_group) return res.json({ group: judge.judge_group, already: true });
 
-  const config = await get('SELECT * FROM judging_config WHERE hackathon_id = ?', [req.hackathonId]);
-  if (!config || config.group_count < 1) return res.status(400).json({ error: 'Groups have not been assigned yet' });
+  const config = await getConfig(req.hackathonId);
+  const now = new Date().toISOString();
+
+  if (!config.assigned_at || config.group_count < 1 || config.auto_assign_stopped) {
+    await run('UPDATE hackathon_judges SET attended_at = ? WHERE hackathon_id = ? AND user_id = ?',
+      [now, req.hackathonId, uid]);
+    return res.json({ ok: true, group: null, pending: true });
+  }
 
   const attended = await all(
     "SELECT judge_group FROM hackathon_judges WHERE hackathon_id = ? AND judge_group != '' ORDER BY attended_at",
@@ -155,12 +221,12 @@ router.post('/attend/:userId', adminOnly, async (req, res) => {
   );
   const group = labelForIndex(attended.length % config.group_count);
   await run('UPDATE hackathon_judges SET judge_group = ?, attended_at = ? WHERE hackathon_id = ? AND user_id = ?',
-    [group, new Date().toISOString(), req.hackathonId, uid]);
+    [group, now, req.hackathonId, uid]);
 
   res.json({ ok: true, group });
 });
 
-// ── DELETE /attend/:userId — admin clears a judge's attendance (re-assign)
+// ── DELETE /attend/:userId — admin clears a judge's attendance
 router.delete('/attend/:userId', adminOnly, async (req, res) => {
   await run("UPDATE hackathon_judges SET judge_group = '', attended_at = '' WHERE hackathon_id = ? AND user_id = ?",
     [req.hackathonId, Number(req.params.userId)]);

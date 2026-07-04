@@ -119,7 +119,7 @@ router.post('/', async (req, res) => {
     "SELECT * FROM judging_config WHERE hackathon_id = ? AND assigned_at != ''",
     [req.hackathonId]
   );
-  if (jconfig && jconfig.group_count > 0) {
+  if (jconfig && jconfig.group_count > 0 && !jconfig.auto_assign_stopped) {
     const alreadyAssigned = await all(
       "SELECT id FROM projects WHERE hackathon_id = ? AND judge_group != ''",
       [req.hackathonId]
