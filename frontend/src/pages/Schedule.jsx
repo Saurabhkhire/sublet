@@ -27,16 +27,23 @@ function playTimeUp() {
 }
 
 function applyVoiceMode(u, voiceMode) {
-  u.pitch = voiceMode === 'female' ? 1.4 : 0.7;
-  u.rate  = voiceMode === 'female' ? 1.0 : 0.85;
+  if (voiceMode === 'rene') {
+    u.pitch = 2.0; u.rate = 1.3;
+  } else if (voiceMode === 'female') {
+    u.pitch = 1.4; u.rate = 1.0;
+  } else {
+    u.pitch = 0.7; u.rate = 0.85;
+  }
   try {
     const voices   = window.speechSynthesis.getVoices();
     const enVoices = voices.filter((v) => v.lang.startsWith('en'));
     if (enVoices.length > 0) {
-      if (voiceMode === 'male') {
-        u.voice = enVoices.find((v) => /male|david|mark|daniel|fred|ralph/i.test(v.name)) || enVoices[0];
+      if (voiceMode === 'female') {
+        u.voice = enVoices.find((v) => /female|samantha|victoria|karen|allison|susan|zira/i.test(v.name))
+               || enVoices[enVoices.length - 1];
       } else {
-        u.voice = enVoices.find((v) => /female|samantha|victoria|karen|allison|susan|zira/i.test(v.name)) || enVoices[Math.min(1, enVoices.length - 1)];
+        u.voice = enVoices.find((v) => /male|david|mark|daniel|fred|ralph/i.test(v.name))
+               || enVoices[0];
       }
     }
   } catch (_) {}
@@ -231,9 +238,10 @@ export default function Schedule() {
     if (voiceMode !== 'off' && !autoStart) {
       // Auto-advance is OFF — admin manually triggers each MC line and the timer
       if (sp) {
-        const from  = sp.title ? ` from ${sp.title}` : '';
-        const about = sp.notes ? ` They will be talking about ${sp.notes}.` : '';
-        setManualText(`Our ${isFirst ? 'first' : 'next'} speaker is ${sp.name}${from}.${about} Please give them a warm welcome.`);
+        const from   = sp.title ? ` from ${sp.title}` : '';
+        const about  = sp.notes ? ` They will be talking about ${sp.notes}.` : '';
+        const closer = voiceMode === 'rene' ? 'Get your ass up here!' : 'Please give them a warm welcome.';
+        setManualText(`Our ${isFirst ? 'first' : 'next'} speaker is ${sp.name}${from}.${about} ${closer}`);
       } else {
         setManualText('');
       }
@@ -242,10 +250,11 @@ export default function Schedule() {
     }
 
     if (voiceMode !== 'off' && sp) {
-      const from  = sp.title ? ` from ${sp.title}` : '';
-      const about = sp.notes ? ` They will be talking about ${sp.notes}.` : '';
+      const from   = sp.title ? ` from ${sp.title}` : '';
+      const about  = sp.notes ? ` They will be talking about ${sp.notes}.` : '';
+      const closer = voiceMode === 'rene' ? 'Get your ass up here!' : 'Please give them a warm welcome.';
       await speakVoice(
-        `Our ${isFirst ? 'first' : 'next'} speaker is ${sp.name}${from}.${about} Please give them a warm welcome.`,
+        `Our ${isFirst ? 'first' : 'next'} speaker is ${sp.name}${from}.${about} ${closer}`,
         voiceMode
       );
     }

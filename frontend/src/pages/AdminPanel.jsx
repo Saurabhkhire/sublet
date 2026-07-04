@@ -64,6 +64,7 @@ function DetailsSection({ hid, meta, reload }) {
         </div>
         <label>Voice announcements <span className="faint small">(browser text-to-speech for speaker &amp; demo day intros)</span>
           <select value={form.voice_mode} onChange={(e) => set('voice_mode', e.target.value)}>
+            <option value="rene">Rene (Hype voice)</option>
             <option value="off">No voice</option>
             <option value="male">Male voice</option>
             <option value="female">Female voice</option>
@@ -76,7 +77,7 @@ function DetailsSection({ hid, meta, reload }) {
           </label>
           <label style={{ flexDirection: 'row', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 0 }}>
             <input type="checkbox" checked={!!form.auto_advance_demo} onChange={(e) => set('auto_advance_demo', e.target.checked)} style={{ width: 'auto', margin: 0 }} />
-            <span>Auto-advance to next demo when current finishes <span className="faint small">(Demo Day)</span></span>
+            <span>Auto-advance to next demo when current finishes <span className="faint small">(Final Demos)</span></span>
           </label>
         </div>
         <label>Location
@@ -1007,13 +1008,13 @@ function DemoSlotsSection({ hid }) {
   return (
     <section className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <h3 style={{ marginTop: 0, marginBottom: 0 }}>🎬 Demo Day Schedule</h3>
+        <h3 style={{ marginTop: 0, marginBottom: 0 }}>🎬 Final Demos Schedule</h3>
         {slots.some((s) => s.status !== 'scheduled') && (
           <button style={spBtn} onClick={resetAll}>↺ Reset all</button>
         )}
       </div>
       <p className="muted small" style={{ marginTop: 4, marginBottom: 12 }}>
-        Add finalist projects to the demo schedule. Open <strong>Demo Day</strong> tab to run the live event.
+        Add finalist projects to the demo schedule. Open the <strong>Final Demos</strong> tab to run the live event.
       </p>
       {error && <p className="error">{error}</p>}
 
@@ -1170,18 +1171,22 @@ function AwardsSection({ hid }) {
 
 // ── Voice & Rules Section ─────────────────────────────────────────────────────
 function applyVoiceMode(u, voiceMode) {
-  u.pitch = voiceMode === 'female' ? 1.4 : 0.7;
-  u.rate  = voiceMode === 'female' ? 1.0 : 0.85;
+  if (voiceMode === 'rene') {
+    u.pitch = 2.0; u.rate = 1.3;
+  } else if (voiceMode === 'female') {
+    u.pitch = 1.4; u.rate = 1.0;
+  } else {
+    u.pitch = 0.7; u.rate = 0.85;
+  }
   try {
     const voices   = window.speechSynthesis.getVoices();
     const enVoices = voices.filter((v) => v.lang.startsWith('en'));
     if (enVoices.length > 0) {
-      if (voiceMode === 'male') {
-        const mv = enVoices.find((v) => /male|david|mark|daniel|fred|ralph/i.test(v.name)) || enVoices[0];
-        u.voice = mv;
+      if (voiceMode === 'female') {
+        u.voice = enVoices.find((v) => /female|samantha|victoria|karen|allison|susan|zira/i.test(v.name))
+               || enVoices[enVoices.length - 1];
       } else {
-        const fv = enVoices.find((v) => /female|samantha|victoria|karen|allison|susan|zira/i.test(v.name)) || enVoices[Math.min(1, enVoices.length - 1)];
-        u.voice = fv;
+        u.voice = enVoices.find((v) => /male|david|mark|daniel|fred|ralph/i.test(v.name)) || enVoices[0];
       }
     }
   } catch (_) {}
@@ -1210,7 +1215,7 @@ Deadline: Please submit your project${deadline}. There is a 30-minute grace peri
 ${tracks ? `\nTracks: This hackathon has the following themed tracks: ${tracks}. Select the track(s) that best represent your project.\n` : ''}${sponsors ? `\nSponsors: Our sponsors have special prizes. Build using their tools or APIs to be eligible for sponsor awards: ${sponsors}.\n` : ''}
 Judging Groups: Projects will be organized into judging groups (A, B, C…) based on submission order. Your group determines your demo time slot during judging.
 
-Demo Day: Each team will present their project to a panel of judges. Prepare a short demo — the time per project is limited, so be concise and focused.
+Final Demos: Each team will present their project to a panel of judges. Prepare a short demo — the time per project is limited, so be concise and focused.
 
 After submitting, you can still edit your project details until judging begins.
 

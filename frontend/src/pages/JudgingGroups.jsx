@@ -195,7 +195,7 @@ export default function JudgingGroups() {
       {/* ── Demo Schedule (visible to all once slots exist) ── */}
       {timedSlots.length > 0 && (
         <div className="card">
-          <h3 style={{ marginTop: 0, marginBottom: 4 }}>🎬 Demo Day Schedule</h3>
+          <h3 style={{ marginTop: 0, marginBottom: 4 }}>🎬 Final Demos Schedule</h3>
           {myDemoSlot && (
             <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 8, background: gc(myProject?.judge_group || 'A') + '22', border: `1.5px solid ${gc(myProject?.judge_group || 'A')}` }}>
               <span style={{ fontWeight: 600 }}>Your project</span>

@@ -30,7 +30,7 @@ export default function HackathonLayout() {
     { to: `/h/${hid}/schedule`, label: 'Schedule', icon: '🎤' },
     ...(meta.is_judge ? [{ to: `/h/${hid}/judging`, label: 'Judging', icon: '★' }] : []),
     { to: `/h/${hid}/judging-groups`, label: 'Project Demo Groups', icon: '⚖' },
-    { to: `/h/${hid}/demo`, label: 'Demo Day', icon: '🎬' },
+    { to: `/h/${hid}/demo`, label: 'Final Demos', icon: '🎬' },
     { to: `/h/${hid}/winners`, label: 'Winners', icon: '🏆' },
     ...(meta.is_admin ? [{ to: `/h/${hid}/admin`, label: 'Admin', icon: '⚙' }] : []),
   ];

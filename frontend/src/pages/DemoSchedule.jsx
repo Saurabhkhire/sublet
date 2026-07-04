@@ -23,16 +23,23 @@ function playTimeUp() {
 }
 
 function applyVoiceMode(u, voiceMode) {
-  u.pitch = voiceMode === 'female' ? 1.4 : 0.7;
-  u.rate  = voiceMode === 'female' ? 1.0 : 0.85;
+  if (voiceMode === 'rene') {
+    u.pitch = 2.0; u.rate = 1.3;
+  } else if (voiceMode === 'female') {
+    u.pitch = 1.4; u.rate = 1.0;
+  } else {
+    u.pitch = 0.7; u.rate = 0.85;
+  }
   try {
     const voices   = window.speechSynthesis.getVoices();
     const enVoices = voices.filter((v) => v.lang.startsWith('en'));
     if (enVoices.length > 0) {
-      if (voiceMode === 'male') {
-        u.voice = enVoices.find((v) => /male|david|mark|daniel|fred|ralph/i.test(v.name)) || enVoices[0];
+      if (voiceMode === 'female') {
+        u.voice = enVoices.find((v) => /female|samantha|victoria|karen|allison|susan|zira/i.test(v.name))
+               || enVoices[enVoices.length - 1];
       } else {
-        u.voice = enVoices.find((v) => /female|samantha|victoria|karen|allison|susan|zira/i.test(v.name)) || enVoices[Math.min(1, enVoices.length - 1)];
+        u.voice = enVoices.find((v) => /male|david|mark|daniel|fred|ralph/i.test(v.name))
+               || enVoices[0];
       }
     }
   } catch (_) {}
@@ -102,15 +109,16 @@ const STATUS = {
 
 function slotName(s) { return s.custom_name || s.project_name || 'Demo'; }
 
-function slotIntroText(s, isFirst) {
-  const verb = isFirst ? 'Our first demo is' : 'Next we have';
+function slotIntroText(s, isFirst, voiceMode) {
+  const verb   = isFirst ? 'Our first demo is' : 'Next we have';
+  const closer = voiceMode === 'rene' ? 'Get your ass up here!' : 'Please welcome them on stage.';
   if (s.project_name && s.custom_name) {
-    return `${verb} project ${s.project_name}, ${s.custom_name}. Please welcome them on stage.`;
+    return `${verb} project ${s.project_name}, ${s.custom_name}. ${closer}`;
   }
   if (s.project_name) {
-    return `${verb} project ${s.project_name}. Please welcome them on stage.`;
+    return `${verb} project ${s.project_name}. ${closer}`;
   }
-  return `${verb} ${slotName(s)}. Please welcome the team.`;
+  return `${verb} ${slotName(s)}. ${voiceMode === 'rene' ? 'Get your ass up here!' : 'Please welcome the team.'}`;
 }
 function slotOutroText(s) {
   const name = s.project_name || s.custom_name || 'the team';
@@ -183,12 +191,12 @@ export default function DemoSchedule() {
 
     const voiceMode = meta.hackathon.voice_mode || 'off';
     if (voiceMode !== 'off' && !autoStart) {
-      setManualText(slotIntroText(first, true));
+      setManualText(slotIntroText(first, true, voiceMode));
       setManualStep('speech');
       return; // admin clicks 🎙 Speak Intro then ▶ Start Timer
     }
 
-    await speakVoice(slotIntroText(first, true), voiceMode);
+    await speakVoice(slotIntroText(first, true, voiceMode), voiceMode);
 
     const now = Date.now();
     setLiveStartedAt(now);
@@ -218,12 +226,12 @@ export default function DemoSchedule() {
         await load();
 
         if (voiceMode !== 'off' && !autoStart) {
-          setManualText(slotIntroText(next, false));
+          setManualText(slotIntroText(next, false, voiceMode));
           setManualStep('speech');
           return;
         }
 
-        await speakVoice(slotIntroText(next, false), voiceMode);
+        await speakVoice(slotIntroText(next, false, voiceMode), voiceMode);
 
         const now = Date.now();
         setLiveStartedAt(now);
@@ -283,13 +291,13 @@ export default function DemoSchedule() {
 
     const voiceMode = meta.hackathon.voice_mode || 'off';
     if (voiceMode !== 'off' && !autoStart) {
-      if (pending) setManualText(slotIntroText(pending, false));
+      if (pending) setManualText(slotIntroText(pending, false, voiceMode));
       setManualStep('speech');
       return;
     }
 
     if (pending) {
-      await speakVoice(slotIntroText(pending, false), voiceMode);
+      await speakVoice(slotIntroText(pending, false, voiceMode), voiceMode);
     }
 
     const now = Date.now();
@@ -354,7 +362,7 @@ export default function DemoSchedule() {
 
     return (
       <div className="stack">
-        <h1 style={{ marginBottom: 4 }}>🎬 Demo Day Schedule</h1>
+        <h1 style={{ marginBottom: 4 }}>🎬 Final Demos</h1>
 
         {/* Now Presenting banner */}
         {liveSlot && (
@@ -458,7 +466,7 @@ export default function DemoSchedule() {
 
   return (
     <div className="stack">
-      <h1 style={{ marginBottom: 4 }}>Demo Day Schedule</h1>
+      <h1 style={{ marginBottom: 4 }}>🎬 Final Demos</h1>
 
       {/* ── Live timer card ── */}
       {isLive && cur && (
@@ -520,7 +528,7 @@ export default function DemoSchedule() {
       {isAdmin && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 0' }}>
           {!isLive ? (
-            <button style={B} onClick={startDemo} disabled={!slots.some(isEligible)}>▶ Start Demo Day</button>
+            <button style={B} onClick={startDemo} disabled={!slots.some(isEligible)}>▶ Start Final Demos</button>
           ) : (
             <button style={B_RED} onClick={async () => { stopTimer(); setIsLive(false); setCurrentId(null); setPendingId(null); }}>■ End</button>
           )}
