@@ -102,6 +102,21 @@ const STATUS = {
 
 function slotName(s) { return s.custom_name || s.project_name || 'Demo'; }
 
+function slotIntroText(s, isFirst) {
+  const verb = isFirst ? 'Our first demo is' : 'Next we have';
+  if (s.project_name && s.custom_name) {
+    return `${verb} project ${s.project_name}, ${s.custom_name}. Please welcome them on stage.`;
+  }
+  if (s.project_name) {
+    return `${verb} project ${s.project_name}. Please welcome them on stage.`;
+  }
+  return `${verb} ${slotName(s)}. Please welcome the team.`;
+}
+function slotOutroText(s) {
+  const name = s.project_name || s.custom_name || 'the team';
+  return `Thank you ${name} for an amazing demo!`;
+}
+
 export default function DemoSchedule() {
   const { meta, hid } = useOutletContext();
   const { user } = useAuth();
@@ -167,12 +182,12 @@ export default function DemoSchedule() {
 
     const voiceMode = meta.hackathon.voice_mode || 'off';
     if (voiceMode !== 'off' && !autoStart) {
-      setManualText(`Our first demo is from team ${slotName(first)}. Please welcome the team.`);
+      setManualText(slotIntroText(first, true));
       setManualStep('speech');
       return; // admin clicks 🎙 Speak Intro then ▶ Start Timer
     }
 
-    await speakVoice(`Our first demo is from team ${slotName(first)}. Please welcome the team.`, voiceMode);
+    await speakVoice(slotIntroText(first, true), voiceMode);
 
     const now = Date.now();
     setLiveStartedAt(now);
@@ -185,13 +200,13 @@ export default function DemoSchedule() {
     const eligible = slots.filter((s) => s.id !== currentId && isEligible(s));
     const next = eligible[0] || null;
     setManualStep(null); setManualText('');
+    const voiceMode = meta.hackathon.voice_mode || 'off';
     if (autoStart || !next) {
       if (cur) await put(`${base}/${cur.id}`, { status: 'completed', actual_end: new Date().toISOString() });
 
       // Thank-you announcement only when demo finishes normally (not skipped)
-      const voiceMode = meta.hackathon.voice_mode || 'off';
       if (cur && !wasSkipped && voiceMode !== 'off') {
-        await speakVoice(`Thank you ${slotName(cur)} for an amazing demo!`, voiceMode);
+        await speakVoice(slotOutroText(cur), voiceMode);
       }
 
       if (next) {
@@ -202,12 +217,12 @@ export default function DemoSchedule() {
         await load();
 
         if (voiceMode !== 'off' && !autoStart) {
-          setManualText(`Our next demo is from team ${slotName(next)}. Please welcome the team.`);
+          setManualText(slotIntroText(next, false));
           setManualStep('speech');
           return;
         }
 
-        await speakVoice(`Our next demo is from team ${slotName(next)}. Please welcome the team.`, voiceMode);
+        await speakVoice(slotIntroText(next, false), voiceMode);
 
         const now = Date.now();
         setLiveStartedAt(now);
@@ -218,6 +233,10 @@ export default function DemoSchedule() {
       }
     } else {
       if (cur) await put(`${base}/${cur.id}`, { status: 'completed', actual_end: new Date().toISOString() });
+      // In manual mode with a next slot: still speak the thank-you, then set pending
+      if (cur && !wasSkipped && voiceMode !== 'off') {
+        await speakVoice(slotOutroText(cur), voiceMode);
+      }
       stopTimer(); setPendingId(next.id); setCurrentId(null); setElapsed(0);
       await load();
     }
@@ -249,13 +268,13 @@ export default function DemoSchedule() {
 
     const voiceMode = meta.hackathon.voice_mode || 'off';
     if (voiceMode !== 'off' && !autoStart) {
-      if (pending) setManualText(`Our next demo is from team ${slotName(pending)}. Please welcome the team.`);
+      if (pending) setManualText(slotIntroText(pending, false));
       setManualStep('speech');
       return;
     }
 
     if (pending) {
-      await speakVoice(`Our next demo is from team ${slotName(pending)}. Please welcome the team.`, voiceMode);
+      await speakVoice(slotIntroText(pending, false), voiceMode);
     }
 
     const now = Date.now();

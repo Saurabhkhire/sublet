@@ -776,6 +776,14 @@ function JudgesAndAssignmentSection({ hid }) {
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
 
+  async function setJudgeGroup(userId, group) {
+    setBusy(true); setError('');
+    try {
+      await put(`${base}/judges/${userId}/group`, { group });
+      await load();
+    } catch (e) { setError(e.message); } finally { setBusy(false); }
+  }
+
   const ppg = data?.projects_per_group || 0;
   const need = data?.group_count_needed || 0;
   const assigned = data?.config?.assigned_at;
@@ -864,19 +872,19 @@ function JudgesAndAssignmentSection({ hid }) {
       ) : (
         <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
           {/* Header */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', padding: '7px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--muted)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 150px 80px', gap: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', padding: '7px 14px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--muted)' }}>
             <span>Judge email</span>
-            <span style={{ paddingRight: 8, textAlign: 'center' }}>Attended</span>
-            <span style={{ minWidth: 130, textAlign: 'center' }}>Group</span>
-            <span style={{ paddingLeft: 8 }}></span>
+            <span style={{ textAlign: 'center' }}>Attended</span>
+            <span style={{ textAlign: 'center' }}>Group</span>
+            <span></span>
           </div>
           {/* Rows */}
           {judges.map((j) => (
-            <div key={j.user_id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 0, alignItems: 'center', padding: '9px 14px', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
+            <div key={j.user_id} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 150px 80px', gap: 0, alignItems: 'center', padding: '9px 14px', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
               {/* Email */}
               <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 8 }}>{j.email}</span>
-              {/* Attendance checkbox — fixed width column so checking/unchecking won't shift layout */}
-              <span style={{ paddingRight: 8, textAlign: 'center' }}>
+              {/* Attendance checkbox — fixed-width column, toggling never reorders the list */}
+              <span style={{ textAlign: 'center' }}>
                 <input
                   type="checkbox"
                   checked={!!j.attended_at}
@@ -886,13 +894,23 @@ function JudgesAndAssignmentSection({ hid }) {
                   style={{ width: 16, height: 16, cursor: 'pointer' }}
                 />
               </span>
-              {/* Group badge — fixed min-width so status text never shifts the row */}
-              <span style={{ minWidth: 130, textAlign: 'center' }}>
-                {j.judge_group
-                  ? <span style={{ fontSize: 12, padding: '3px 10px', borderRadius: 5, background: jagc(j.judge_group), color: '#fff', fontWeight: 700, display: 'inline-block' }}>Group {j.judge_group}</span>
-                  : j.attended_at
-                    ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#fef9c3', color: '#854d0e', fontWeight: 600, display: 'inline-block' }}>✓ awaiting group</span>
-                    : <span style={{ fontSize: 11, color: 'var(--muted)', display: 'inline-block' }}>—</span>}
+              {/* Group — dropdown for manual assignment */}
+              <span style={{ textAlign: 'center', paddingLeft: 4, paddingRight: 4 }}>
+                <select
+                  value={j.judge_group || ''}
+                  disabled={busy}
+                  onChange={(e) => setJudgeGroup(j.user_id, e.target.value)}
+                  style={{ fontSize: 12, padding: '3px 6px', width: '100%', marginTop: 0,
+                    background: j.judge_group ? jagc(j.judge_group) : undefined,
+                    color: j.judge_group ? '#fff' : undefined,
+                    fontWeight: j.judge_group ? 700 : undefined,
+                  }}
+                >
+                  <option value="">{j.attended_at ? '✓ awaiting group' : '— no group —'}</option>
+                  {groupKeys.length > 0
+                    ? groupKeys.map((g) => <option key={g} value={g} style={{ background: '#fff', color: '#000' }}>Group {g}</option>)
+                    : ['A','B','C','D','E','F','G','H'].map((g) => <option key={g} value={g} style={{ background: '#fff', color: '#000' }}>Group {g}</option>)}
+                </select>
               </span>
               {/* Delete */}
               <span style={{ paddingLeft: 8 }}>
@@ -1043,11 +1061,11 @@ function DemoSlotsSection({ hid }) {
               ) : (
                 <>
                   <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {name}
+                    {s.project_name || <span className="faint">—</span>}
                     {s.project_award && <span style={{ marginLeft: 6, fontSize: 11, padding: '1px 5px', borderRadius: 4, background: 'var(--accent)', color: '#fff' }}>{s.project_award}</span>}
                   </div>
                   <div className="small muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.team?.join(', ') || (s.custom_name && s.project_name ? s.project_name : '—')}
+                    {s.custom_name || <span style={{ opacity: 0.35 }}>—</span>}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                     {s.duration_minutes} min

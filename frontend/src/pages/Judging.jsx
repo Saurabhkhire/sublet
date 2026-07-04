@@ -41,12 +41,12 @@ function jgProjectSlot(g, pos, startStr, judgeTimeMins, perProjectMins) {
 export default function Judging() {
   const { meta, hid } = useOutletContext();
   const criteria = meta.score_criteria;
-  const [view, setView] = useState('score'); // 'score' | 'results' | 'invest'
+  const [view, setView] = useState('score'); // 'group' | 'score' | 'results' | 'invest'
   const [projects, setProjects] = useState([]);
   const [jgData, setJgData] = useState(null);
   const [sponsorFilter, setSponsorFilter] = useState('');
   const [selected, setSelected] = useState(null);
-  const [detail, setDetail] = useState(null); // project shown in the modal
+  const [detail, setDetail] = useState(null);
   const [scoreData, setScoreData] = useState(null);
   const [form, setForm] = useState({});
   const [investAmt, setInvestAmt] = useState(0);
@@ -128,56 +128,15 @@ export default function Judging() {
 
   return (
     <div className="stack">
-      {/* ── Judge Group Projects (shown before tabs when judge has a group) ── */}
-      {myGroup && (
-        <div className="card" style={{ border: `2px solid ${jggc(myGroup)}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 18, color: jggc(myGroup) }}>Judge Group Projects — Group {myGroup}</div>
-              {jgGroupWindow(myGroup, startStr2, jt) && (
-                <div className="small muted" style={{ marginTop: 2 }}>{jgGroupWindow(myGroup, startStr2, jt)}</div>
-              )}
-            </div>
-            <span className="badge" style={{ background: jggc(myGroup) + '22', color: jggc(myGroup), fontWeight: 700, fontSize: 13 }}>
-              {groupProjects2.length} project{groupProjects2.length !== 1 ? 's' : ''} to review
-            </span>
-          </div>
-          {groupProjects2.length === 0 ? (
-            <p className="muted small" style={{ margin: 0 }}>No projects assigned to your group yet.</p>
-          ) : (
-            <div className="stack" style={{ gap: 6 }}>
-              {groupProjects2.map((gp, idx) => {
-                const liveP = projects.find((p) => p.id === gp.id);
-                const slot = jgProjectSlot(myGroup, idx, startStr2, jt, pp2);
-                return (
-                  <div key={gp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 7, gap: 10 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>{gp.name}</div>
-                      {slot && <div className="small muted">{slot}</div>}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      {liveP?.my_score != null
-                        ? <span className="badge green">✓ {liveP.my_score}</span>
-                        : <span className="badge amber">to score</span>}
-                      <button
-                        type="button"
-                        style={{ padding: '5px 14px', fontSize: 13 }}
-                        onClick={() => { setView('score'); if (liveP) openProject(liveP); }}
-                      >
-                        Score ↗
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="spread" style={{ flexWrap: 'wrap', gap: 12 }}>
         <h1 style={{ margin: 0 }}>Judging</h1>
         <div className="tabs">
+          {myGroup && (
+            <button type="button" className={`tab ${view === 'group' ? 'active' : ''}`} onClick={() => setView('group')}
+              style={view !== 'group' ? { borderColor: jggc(myGroup), color: jggc(myGroup) } : { background: jggc(myGroup), color: '#fff', borderColor: jggc(myGroup) }}>
+              Group {myGroup} Projects
+            </button>
+          )}
           <button type="button" className={`tab ${view === 'score' ? 'active' : ''}`} onClick={() => setView('score')}>Score projects</button>
           <button type="button" className={`tab ${view === 'results' ? 'active' : ''}`} onClick={() => setView('results')}>Results &amp; averages</button>
           <button type="button" className={`tab ${view === 'invest' ? 'active' : ''}`} onClick={() => setView('invest')}>Investments</button>
@@ -194,8 +153,15 @@ export default function Judging() {
         </label>
       </div>
 
+      {view === 'group' && myGroup && (
+        <MyGroupView
+          myGroup={myGroup} groupProjects={groupProjects2} projects={projects}
+          jt={jt} pp={pp2} startStr={startStr2}
+          onScore={(liveP) => { setView('score'); if (liveP) openProject(liveP); }}
+        />
+      )}
       {view === 'score' && (
-        <ScoreView {...{ projects, selected, openProject, scoreData, criteria, form, setForm, investAmt, setInvestAmt, investUnit, setInvestUnit, comments, setComments, submitScore, liveTotal, error, msg, isAdmin: meta.is_admin, jgData, startStr: meta.hackathon?.start_time }} />
+        <ScoreView {...{ projects, selected, openProject, scoreData, criteria, form, setForm, investAmt, setInvestAmt, investUnit, setInvestUnit, comments, setComments, submitScore, liveTotal, error, msg, isAdmin: meta.is_admin }} />
       )}
       {view === 'results' && <ResultsView ranked={byScore} onOpen={setDetail} />}
       {view === 'invest' && <InvestmentsView ranked={byInvestment} onOpen={setDetail} />}
@@ -227,6 +193,54 @@ export default function Judging() {
             </button>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- My Group tab view ---------------- */
+function MyGroupView({ myGroup, groupProjects, projects, jt, pp, startStr, onScore }) {
+  const window_ = jgGroupWindow(myGroup, startStr, jt);
+  return (
+    <div className="card" style={{ border: `2px solid ${jggc(myGroup)}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 18, color: jggc(myGroup) }}>Judge Group Projects — Group {myGroup}</div>
+          {window_ && <div className="small muted" style={{ marginTop: 2 }}>{window_}</div>}
+        </div>
+        <span className="badge" style={{ background: jggc(myGroup) + '22', color: jggc(myGroup), fontWeight: 700, fontSize: 13 }}>
+          {groupProjects.length} project{groupProjects.length !== 1 ? 's' : ''} to review
+        </span>
+      </div>
+      {groupProjects.length === 0 ? (
+        <p className="muted small" style={{ margin: 0 }}>No projects assigned to your group yet.</p>
+      ) : (
+        <div className="stack" style={{ gap: 6 }}>
+          {groupProjects.map((gp, idx) => {
+            const liveP = projects.find((p) => p.id === gp.id);
+            const slot = jgProjectSlot(myGroup, idx, startStr, jt, pp);
+            return (
+              <div key={gp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 7, gap: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{gp.name}</div>
+                  {slot && <div className="small muted">{slot}</div>}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  {liveP?.my_score != null
+                    ? <span className="badge green">✓ {liveP.my_score}</span>
+                    : <span className="badge amber">to score</span>}
+                  <button
+                    type="button"
+                    style={{ padding: '5px 14px', fontSize: 13 }}
+                    onClick={() => onScore(liveP)}
+                  >
+                    Score ↗
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -303,71 +317,16 @@ function DetailModal({ project, criteria, onClose }) {
   );
 }
 
-/* ---------------- View 1: score your projects ---------------- */
-function ScoreView({ projects, selected, openProject, scoreData, criteria, form, setForm, investAmt, setInvestAmt, investUnit, setInvestUnit, comments, setComments, submitScore, liveTotal, error, msg, isAdmin, jgData, startStr }) {
+/* ---------------- View 1: score all projects ---------------- */
+function ScoreView({ projects, selected, openProject, scoreData, criteria, form, setForm, investAmt, setInvestAmt, investUnit, setInvestUnit, comments, setComments, submitScore, liveTotal, error, msg, isAdmin }) {
   const investTotal = Number(investAmt || 0) * investUnit;
-
-  const myGroup = jgData?.my_judge_group || null;
-  const jt = jgData?.config?.judge_time_minutes;
-  const pp = jgData?.config?.per_project_minutes;
-  const groupProjects = myGroup && jgData?.groups?.[myGroup]?.projects || [];
-
-  // Build a lookup: project id → position in my group
-  const groupPosById = {};
-  groupProjects.forEach((gp, i) => { groupPosById[gp.id] = i; });
-
-  // Sort: my-group projects first (in group order), then the rest
-  const sortedProjects = myGroup
-    ? [
-        ...groupProjects.map((gp) => projects.find((p) => p.id === gp.id)).filter(Boolean),
-        ...projects.filter((p) => !(p.id in groupPosById)),
-      ]
-    : projects;
 
   return (
     <div className="split">
       <div className="list-pick">
-        {/* ── Judge group banner ── */}
-        {myGroup && (
-          <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 8, background: jggc(myGroup) + '18', border: `1.5px solid ${jggc(myGroup)}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 4 }}>
-              <span style={{ fontWeight: 700, fontSize: 15, color: jggc(myGroup) }}>Your Group: {myGroup}</span>
-              {jgGroupWindow(myGroup, startStr, jt) && (
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{jgGroupWindow(myGroup, startStr, jt)}</span>
-              )}
-            </div>
-            {groupProjects.length > 0 && (
-              <div className="stack" style={{ gap: 4, marginTop: 8 }}>
-                {groupProjects.map((gp, idx) => {
-                  const liveP = projects.find((p) => p.id === gp.id);
-                  const slot = jgProjectSlot(myGroup, idx, startStr, jt, pp);
-                  return (
-                    <button
-                      key={gp.id}
-                      type="button"
-                      onClick={() => liveP && openProject(liveP)}
-                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', textAlign: 'left', padding: '6px 10px', borderRadius: 6, border: selected?.id === gp.id ? `1.5px solid ${jggc(myGroup)}` : '1.5px solid transparent', background: selected?.id === gp.id ? jggc(myGroup) + '22' : 'var(--surface)', cursor: 'pointer', gap: 8 }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 500, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{gp.name}</div>
-                        {slot && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{slot}</div>}
-                      </div>
-                      {liveP?.my_score != null
-                        ? <span className="badge green" style={{ flexShrink: 0 }}>✓ {liveP.my_score}</span>
-                        : <span className="badge amber" style={{ flexShrink: 0 }}>to score</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        <p className="small faint" style={{ margin: myGroup ? '8px 0 2px' : '0 0 2px' }}>
-          {myGroup ? 'All projects:' : 'Pick a project to give your score.'}
-        </p>
+        <p className="small faint" style={{ margin: '0 0 2px' }}>Pick a project to give your score.</p>
         {projects.length === 0 && <div className="card empty"><p>No projects.</p></div>}
-        {sortedProjects.map((p) => (
+        {projects.map((p) => (
           <button type="button" key={p.id} className={`item ${selected?.id === p.id ? 'active' : ''}`} onClick={() => openProject(p)}>
             <div className="spread">
               <strong style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</strong>
@@ -466,24 +425,35 @@ function ResultsView({ ranked, onOpen }) {
       {ranked.length === 0 ? <div className="empty"><p>No projects yet.</p></div> : (
         <div className="table-wrap">
           <table className="lb">
-            <thead><tr><th>#</th><th className="col-name">Project</th><th>Tracks</th><th>Sponsors</th><th className="col-num">Avg /100</th><th className="col-num">Judges</th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ width: 40 }}>#</th>
+                <th>Project</th>
+                <th>Tracks</th>
+                <th>Sponsors</th>
+                <th style={{ width: 80, textAlign: 'right' }}>Avg</th>
+                <th style={{ width: 60, textAlign: 'right' }}>Judges</th>
+              </tr>
+            </thead>
             <tbody>
-              {ranked.map((p) => {
-                const rank = p.average_score != null ? scored.indexOf(p) + 1 : null;
-                return (
-                  <tr key={p.id} className="row-click" onClick={() => onOpen(p)}>
-                    <td className={`rank ${rank && rank <= 3 ? `medal-${rank}` : ''}`}>{rank ? (rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : rank) : '–'}</td>
-                    <td className="col-name"><strong className="link-strong">{p.name}</strong></td>
-                    <td><TrackTags tracks={p.tracks} /></td>
-                    <td><SponsorTags sponsors={p.sponsors} /></td>
-                    <td className="col-num">{p.average_score != null ? <span className="score-big">{p.average_score}</span> : <span className="faint">—</span>}</td>
-                    <td className="col-num">{p.judge_count || 0}</td>
-                  </tr>
-                );
-              })}
+              {ranked.map((p, i) => (
+                <tr key={p.id} className="clickable" onClick={() => onOpen(p)}>
+                  <td style={{ color: 'var(--muted)' }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
+                  <td><strong>{p.name}</strong></td>
+                  <td><TrackTags tracks={p.tracks} /></td>
+                  <td><SponsorTags sponsors={p.sponsors} /></td>
+                  <td style={{ textAlign: 'right' }}>
+                    {p.average_score != null ? <strong>{p.average_score}/100</strong> : <span className="faint">—</span>}
+                  </td>
+                  <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{p.judge_count || 0}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
+      )}
+      {scored.length === 0 && ranked.length > 0 && (
+        <p className="faint small" style={{ marginTop: 10 }}>No projects have been scored yet.</p>
       )}
     </div>
   );
@@ -491,32 +461,41 @@ function ResultsView({ ranked, onOpen }) {
 
 /* ---------------- View 3: investments ---------------- */
 function InvestmentsView({ ranked, onOpen }) {
-  const invested = ranked.filter((p) => (p.total_investment ?? 0) > 0);
-  const grandTotal = ranked.reduce((a, p) => a + (p.total_investment || 0), 0);
+  const totalInvest = ranked.reduce((a, p) => a + (p.total_investment || 0), 0);
   return (
     <div className="card">
       <div className="spread" style={{ marginBottom: 10 }}>
-        <h3 style={{ margin: 0 }}>Investment leaderboard</h3>
-        <span className="muted small" title={money(grandTotal)}>Total across all judges · {moneyCompact(grandTotal)} overall · click a row for details</span>
+        <h3 style={{ margin: 0 }}>Funding Leaderboard</h3>
+        {totalInvest > 0 && <span className="muted small">Total invested: {money(totalInvest)} · click a row for details</span>}
       </div>
       {ranked.length === 0 ? <div className="empty"><p>No projects yet.</p></div> : (
         <div className="table-wrap">
           <table className="lb">
-            <thead><tr><th>#</th><th className="col-name">Project</th><th>Tracks</th><th>Sponsors</th><th className="col-num">Total invested</th><th className="col-num">Investors</th></tr></thead>
+            <thead>
+              <tr>
+                <th style={{ width: 40 }}>#</th>
+                <th>Project</th>
+                <th>Tracks</th>
+                <th>Sponsors</th>
+                <th style={{ textAlign: 'right' }}>Total invested</th>
+                <th style={{ width: 70, textAlign: 'right' }}>Investors</th>
+              </tr>
+            </thead>
             <tbody>
-              {ranked.map((p) => {
-                const rank = (p.total_investment ?? 0) > 0 ? invested.indexOf(p) + 1 : null;
-                return (
-                  <tr key={p.id} className="row-click" onClick={() => onOpen(p)}>
-                    <td className={`rank ${rank && rank <= 3 ? `medal-${rank}` : ''}`}>{rank ? (rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : rank) : '–'}</td>
-                    <td className="col-name"><strong className="link-strong">{p.name}</strong></td>
-                    <td><TrackTags tracks={p.tracks} /></td>
-                    <td><SponsorTags sponsors={p.sponsors} /></td>
-                    <td className="col-num"><span className="score-big" title={money(p.total_investment)}>{moneyCompact(p.total_investment)}</span></td>
-                    <td className="col-num">{p.investor_count || 0}</td>
-                  </tr>
-                );
-              })}
+              {ranked.map((p, i) => (
+                <tr key={p.id} className="clickable" onClick={() => onOpen(p)}>
+                  <td style={{ color: 'var(--muted)' }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
+                  <td><strong>{p.name}</strong></td>
+                  <td><TrackTags tracks={p.tracks} /></td>
+                  <td><SponsorTags sponsors={p.sponsors} /></td>
+                  <td style={{ textAlign: 'right' }}>
+                    {p.total_investment > 0
+                      ? <span title={money(p.total_investment)}><strong>{money(p.total_investment)}</strong></span>
+                      : <span className="faint">—</span>}
+                  </td>
+                  <td style={{ textAlign: 'right', color: 'var(--muted)' }}>{p.investor_count || 0}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

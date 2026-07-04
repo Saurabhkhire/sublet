@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
     `SELECT hj.user_id, hj.judge_group, hj.attended_at, u.email
      FROM hackathon_judges hj
      JOIN users u ON u.id = hj.user_id
-     WHERE hj.hackathon_id = ? ORDER BY hj.attended_at`,
+     WHERE hj.hackathon_id = ? ORDER BY hj.id`,
     [req.hackathonId]
   );
 
@@ -231,6 +231,27 @@ router.delete('/attend/:userId', adminOnly, async (req, res) => {
   await run("UPDATE hackathon_judges SET judge_group = '', attended_at = '' WHERE hackathon_id = ? AND user_id = ?",
     [req.hackathonId, Number(req.params.userId)]);
   res.json({ ok: true });
+});
+
+// ── PUT /judges/:userId/group — admin manually sets a judge's group (or clears it with group:'')
+router.put('/judges/:userId/group', adminOnly, async (req, res) => {
+  const uid = Number(req.params.userId);
+  const group = req.body?.group ?? '';
+  const judge = await get('SELECT * FROM hackathon_judges WHERE hackathon_id = ? AND user_id = ?', [req.hackathonId, uid]);
+  if (!judge) return res.status(404).json({ error: 'Judge not found' });
+  await run('UPDATE hackathon_judges SET judge_group = ? WHERE hackathon_id = ? AND user_id = ?',
+    [group, req.hackathonId, uid]);
+  res.json({ ok: true, group });
+});
+
+// ── PUT /projects/:projectId/group — admin manually sets a project's demo group (or clears with group:'')
+router.put('/projects/:projectId/group', adminOnly, async (req, res) => {
+  const pid = Number(req.params.projectId);
+  const group = req.body?.group ?? '';
+  const project = await get('SELECT id FROM projects WHERE id = ? AND hackathon_id = ?', [pid, req.hackathonId]);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  await run('UPDATE projects SET judge_group = ? WHERE id = ?', [group, pid]);
+  res.json({ ok: true, group });
 });
 
 export default router;
