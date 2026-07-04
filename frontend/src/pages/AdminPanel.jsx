@@ -64,10 +64,10 @@ function DetailsSection({ hid, meta, reload }) {
         </div>
         <label>MC Voice
           <select value={form.voice_mode} onChange={(e) => set('voice_mode', e.target.value)}>
-            <option value="rene">Rene (Hype voice)</option>
             <option value="off">No voice</option>
             <option value="male">Male voice</option>
             <option value="female">Female voice</option>
+            <option value="rene">Rene (Hype voice)</option>
           </select>
         </label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2, marginBottom: 6 }}>
