@@ -111,14 +111,14 @@ function slotName(s) { return s.custom_name || s.project_name || 'Demo'; }
 
 function slotIntroText(s, isFirst, voiceMode) {
   const verb   = isFirst ? 'Our first demo is' : 'Next we have';
-  const closer = voiceMode === 'rene' ? 'Get your ass up here!' : 'Please welcome them on stage.';
+  const closer = voiceMode === 'rene' ? '... Get your ass up here!' : '... Please welcome them on stage.';
   if (s.project_name && s.custom_name) {
     return `${verb} project ${s.project_name}, ${s.custom_name}. ${closer}`;
   }
   if (s.project_name) {
     return `${verb} project ${s.project_name}. ${closer}`;
   }
-  return `${verb} ${slotName(s)}. ${voiceMode === 'rene' ? 'Get your ass up here!' : 'Please welcome the team.'}`;
+  return `${verb} ${slotName(s)}. ${voiceMode === 'rene' ? '... Get your ass up here!' : '... Please welcome the team.'}`;
 }
 function slotOutroText(s) {
   const name = s.project_name || s.custom_name || 'the team';

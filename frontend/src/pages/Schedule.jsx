@@ -240,7 +240,7 @@ export default function Schedule() {
       if (sp) {
         const from   = sp.title ? ` from ${sp.title}` : '';
         const about  = sp.notes ? ` They will be talking about ${sp.notes}.` : '';
-        const closer = voiceMode === 'rene' ? 'Get your ass up here!' : 'Please give them a warm welcome.';
+        const closer = voiceMode === 'rene' ? '... Get your ass up here!' : '... Please give them a warm welcome.';
         setManualText(`Our ${isFirst ? 'first' : 'next'} speaker is ${sp.name}${from}.${about} ${closer}`);
       } else {
         setManualText('');
@@ -252,7 +252,7 @@ export default function Schedule() {
     if (voiceMode !== 'off' && sp) {
       const from   = sp.title ? ` from ${sp.title}` : '';
       const about  = sp.notes ? ` They will be talking about ${sp.notes}.` : '';
-      const closer = voiceMode === 'rene' ? 'Get your ass up here!' : 'Please give them a warm welcome.';
+      const closer = voiceMode === 'rene' ? '... Get your ass up here!' : '... Please give them a warm welcome.';
       await speakVoice(
         `Our ${isFirst ? 'first' : 'next'} speaker is ${sp.name}${from}.${about} ${closer}`,
         voiceMode
