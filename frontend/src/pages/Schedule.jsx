@@ -289,6 +289,13 @@ export default function Schedule() {
       actual_end: new Date().toISOString(),
     });
     setSpeakers((prev) => prev.map((s) => s.id === current.id ? { ...s, status } : s));
+
+    // Thank-you announcement only when speaker finishes (not when skipped/rescheduled)
+    const voiceMode = meta.hackathon.voice_mode || 'off';
+    if (status === 'completed' && voiceMode !== 'off') {
+      await speakVoice(`Thank you ${current.name} for an amazing speech!`, voiceMode);
+    }
+
     const nextSp = speakers.find((s, i) => i > currentIdx && isEligible(s));
     if (nextSp) {
       if (autoStart) {

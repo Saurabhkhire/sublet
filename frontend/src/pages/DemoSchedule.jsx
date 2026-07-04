@@ -172,13 +172,20 @@ export default function DemoSchedule() {
     startTimer(now);
   }
 
-  async function advance() {
+  async function advance(wasSkipped = false) {
     if (!currentId) return;
     const cur = currentSlot();
     const eligible = slots.filter((s) => s.id !== currentId && isEligible(s));
     const next = eligible[0] || null;
     if (autoStart || !next) {
       if (cur) await put(`${base}/${cur.id}`, { status: 'completed', actual_end: new Date().toISOString() });
+
+      // Thank-you announcement only when demo finishes normally (not skipped)
+      const voiceMode = meta.hackathon.voice_mode || 'off';
+      if (cur && !wasSkipped && voiceMode !== 'off') {
+        await speakVoice(`Thank you ${slotName(cur)} for an amazing demo!`, voiceMode);
+      }
+
       if (next) {
         setCurrentId(next.id); setPendingId(null);
         setElapsed(0);
@@ -227,7 +234,7 @@ export default function DemoSchedule() {
   async function skipCurrent() {
     if (!currentId) return;
     await put(`${base}/${currentId}`, { status: 'skipped', actual_end: new Date().toISOString() });
-    await advance();
+    await advance(true); // wasSkipped=true — no thank-you announcement
   }
 
   async function reschedule(id) {
