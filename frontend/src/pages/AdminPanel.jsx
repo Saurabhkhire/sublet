@@ -62,7 +62,7 @@ function DetailsSection({ hid, meta, reload }) {
             <input type="time" value={form.submission_deadline} onChange={(e) => set('submission_deadline', e.target.value)} />
           </label>
         </div>
-        <label>Voice announcements <span className="faint small">(browser text-to-speech for speaker &amp; demo day intros)</span>
+        <label>MC Voice
           <select value={form.voice_mode} onChange={(e) => set('voice_mode', e.target.value)}>
             <option value="rene">Rene (Hype voice)</option>
             <option value="off">No voice</option>
