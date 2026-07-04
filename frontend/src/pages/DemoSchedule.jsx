@@ -22,7 +22,16 @@ function playTimeUp() {
   setTimeout(() => playBeep(880, 0.25), 640);
 }
 
-function applyVoiceMode(u, voiceMode) {
+function getReadyVoices() {
+  return new Promise((resolve) => {
+    try {
+      const v = window.speechSynthesis.getVoices();
+      if (v.length > 0) return resolve(v);
+      window.speechSynthesis.onvoiceschanged = () => resolve(window.speechSynthesis.getVoices());
+    } catch (_) { resolve([]); }
+  });
+}
+function applyVoiceMode(u, voiceMode, voices = []) {
   if (voiceMode === 'rene') {
     u.pitch = 2.0; u.rate = 1.3;
   } else if (voiceMode === 'female') {
@@ -30,32 +39,26 @@ function applyVoiceMode(u, voiceMode) {
   } else {
     u.pitch = 0.7; u.rate = 0.85;
   }
-  try {
-    const voices   = window.speechSynthesis.getVoices();
-    const enVoices = voices.filter((v) => v.lang.startsWith('en'));
-    if (enVoices.length > 0) {
-      if (voiceMode === 'female') {
-        u.voice = enVoices.find((v) => /female|samantha|victoria|karen|allison|susan|zira/i.test(v.name))
-               || enVoices[enVoices.length - 1];
-      } else {
-        u.voice = enVoices.find((v) => /male|david|mark|daniel|fred|ralph/i.test(v.name))
-               || enVoices[0];
-      }
+  const enVoices = voices.filter((v) => v.lang.startsWith('en'));
+  if (enVoices.length > 0) {
+    if (voiceMode === 'female') {
+      u.voice = enVoices.find((v) => /female|samantha|victoria|karen|allison|susan|zira/i.test(v.name))
+             || enVoices[enVoices.length - 1];
+    } else {
+      u.voice = enVoices.find((v) => /male|david|mark|daniel|fred|ralph/i.test(v.name))
+             || enVoices[0];
     }
-  } catch (_) {}
+  }
 }
-function speakVoice(text, voiceMode) {
-  return new Promise((resolve) => {
-    try {
-      if (!window.speechSynthesis || !voiceMode || voiceMode === 'off') { resolve(); return; }
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      applyVoiceMode(u, voiceMode);
-      u.onend  = resolve;
-      u.onerror = resolve;
-      window.speechSynthesis.speak(u);
-    } catch (_) { resolve(); }
-  });
+async function speakVoice(text, voiceMode) {
+  try {
+    if (!window.speechSynthesis || !voiceMode || voiceMode === 'off') return;
+    const voices = await getReadyVoices();
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    applyVoiceMode(u, voiceMode, voices);
+    await new Promise((resolve) => { u.onend = resolve; u.onerror = resolve; window.speechSynthesis.speak(u); });
+  } catch (_) {}
 }
 
 function fmtSecs(secs) {
