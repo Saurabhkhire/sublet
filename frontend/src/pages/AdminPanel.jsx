@@ -467,7 +467,7 @@ function SpeakersSection({ hid }) {
   const [error, setError]       = useState('');
 
   // add-form state
-  const EMPTY = { time: '', segment: '', speaker: '', notes: '', duration: '15', breakAfter: '', voiceAgent: 'none' };
+  const EMPTY = { time: '', segment: '', speaker: '', notes: '', duration: '15', breakAfter: '', voiceAgent: 'none', voiceScript: '' };
   const [add, setAdd]       = useState(EMPTY);
   const [addBusy, setAddBusy] = useState(false);
 
@@ -496,6 +496,7 @@ function SpeakersSection({ hid }) {
         duration_minutes: Math.max(1, Number(add.duration) || 15),
         break_after_minutes: Math.max(0, Number(add.breakAfter) || 0),
         voice_agent: add.voiceAgent || 'none',
+        voice_script: add.voiceScript || '',
       });
       setAdd(EMPTY);
       await load();
@@ -610,6 +611,14 @@ function SpeakersSection({ hid }) {
         <button type="submit" style={spBtn} disabled={addBusy || (!add.speaker.trim() && !add.segment.trim())}>
           {addBusy ? '…' : '+ Add'}
         </button>
+        {add.voiceAgent !== 'none' && (
+          <textarea
+            value={add.voiceScript}
+            onChange={(e) => setAdd({ ...add, voiceScript: e.target.value })}
+            placeholder="Write the script that will be read aloud when this speaker's timer starts…"
+            style={{ gridColumn: '1 / -1', fontSize: 12, padding: '6px 8px', minHeight: 72, resize: 'vertical', borderRadius: 4, border: '1px solid var(--border)' }}
+          />
+        )}
       </form>
 
       {/* ── Schedule list ── */}
@@ -971,7 +980,7 @@ function DemoSlotsSection({ hid }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const EMPTY = { projectId: '', customName: '', duration: '10', breakAfter: '', voiceAgent: 'none' };
+  const EMPTY = { projectId: '', customName: '', duration: '10', breakAfter: '', voiceAgent: 'none', voiceScript: '' };
   const [add, setAdd] = useState(EMPTY);
   const [editing, setEditing] = useState(null);
 
@@ -994,6 +1003,7 @@ function DemoSlotsSection({ hid }) {
         duration_minutes: Math.max(1, Number(add.duration) || 10),
         break_after_minutes: Math.max(0, Number(add.breakAfter) || 0),
         voice_agent: add.voiceAgent || 'none',
+        voice_script: add.voiceScript || '',
       });
       setAdd(EMPTY); await load();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
@@ -1072,6 +1082,14 @@ function DemoSlotsSection({ hid }) {
           <option value="female">🤖 Female agent</option>
         </select>
         <button type="submit" style={spBtn} disabled={busy || (!add.projectId && !add.customName.trim())}>+ Add</button>
+        {add.voiceAgent !== 'none' && (
+          <textarea
+            value={add.voiceScript}
+            onChange={(e) => setAdd({ ...add, voiceScript: e.target.value })}
+            placeholder="Write the script that will be read aloud when this demo slot's timer starts…"
+            style={{ gridColumn: '1 / -1', fontSize: 12, padding: '6px 8px', minHeight: 72, resize: 'vertical', borderRadius: 4, border: '1px solid var(--border)' }}
+          />
+        )}
       </form>
 
       {slots.length === 0 && <p className="faint small">No demo slots yet.</p>}
