@@ -45,7 +45,7 @@ export default function App() {
           <Route path="judging-groups" element={<JudgingGroups />} />
           <Route path="demo" element={<DemoSchedule />} />
           <Route path="winners" element={<Winners />} />
-          <Route path="admin" element={<AdminPanel />} />
+          <Route path="admin" element={<Protected need="admin"><AdminPanel /></Protected>} />
         </Route>
         <Route path="*" element={<div className="page">Not found.</div>} />
       </Routes>
