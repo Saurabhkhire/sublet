@@ -467,7 +467,7 @@ function SpeakersSection({ hid }) {
   const [error, setError]       = useState('');
 
   // add-form state
-  const EMPTY = { time: '', segment: '', speaker: '', notes: '', duration: '15', breakAfter: '' };
+  const EMPTY = { time: '', segment: '', speaker: '', notes: '', duration: '15', breakAfter: '', voiceAgent: 'none' };
   const [add, setAdd]       = useState(EMPTY);
   const [addBusy, setAddBusy] = useState(false);
 
@@ -495,6 +495,7 @@ function SpeakersSection({ hid }) {
         notes: add.notes.trim(),
         duration_minutes: Math.max(1, Number(add.duration) || 15),
         break_after_minutes: Math.max(0, Number(add.breakAfter) || 0),
+        voice_agent: add.voiceAgent || 'none',
       });
       setAdd(EMPTY);
       await load();
@@ -601,8 +602,10 @@ function SpeakersSection({ hid }) {
         <input placeholder="AI trends in 2026…" value={add.notes}      onChange={(e) => setAdd({ ...add, notes: e.target.value })}      style={{ fontSize: 13 }} />
         <input type="number" min={1} max={300}   value={add.duration}   onChange={(e) => setAdd({ ...add, duration: e.target.value })}   style={{ fontSize: 13, padding: '5px 4px' }} />
         <input type="number" min={0} max={120} placeholder="0 min" value={add.breakAfter} onChange={(e) => setAdd({ ...add, breakAfter: e.target.value })} style={{ fontSize: 13, padding: '5px 4px' }} />
-        <select style={{ fontSize: 13, padding: '5px 4px' }} disabled title="Set voice agent via ✏ edit">
-          <option>No agent</option>
+        <select value={add.voiceAgent} onChange={(e) => setAdd({ ...add, voiceAgent: e.target.value })} style={{ fontSize: 13, padding: '5px 4px' }}>
+          <option value="none">No agent</option>
+          <option value="male">🤖 Male agent</option>
+          <option value="female">🤖 Female agent</option>
         </select>
         <button type="submit" style={spBtn} disabled={addBusy || (!add.speaker.trim() && !add.segment.trim())}>
           {addBusy ? '…' : '+ Add'}
@@ -968,7 +971,7 @@ function DemoSlotsSection({ hid }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const EMPTY = { projectId: '', customName: '', duration: '10', breakAfter: '' };
+  const EMPTY = { projectId: '', customName: '', duration: '10', breakAfter: '', voiceAgent: 'none' };
   const [add, setAdd] = useState(EMPTY);
   const [editing, setEditing] = useState(null);
 
@@ -990,6 +993,7 @@ function DemoSlotsSection({ hid }) {
         custom_name: add.customName.trim(),
         duration_minutes: Math.max(1, Number(add.duration) || 10),
         break_after_minutes: Math.max(0, Number(add.breakAfter) || 0),
+        voice_agent: add.voiceAgent || 'none',
       });
       setAdd(EMPTY); await load();
     } catch (err) { setError(err.message); } finally { setBusy(false); }
@@ -1062,8 +1066,10 @@ function DemoSlotsSection({ hid }) {
         <input placeholder="Opening, Awards…" value={add.customName} onChange={(e) => setAdd({ ...add, customName: e.target.value })} style={{ fontSize: 13 }} />
         <input type="number" min={1} max={120} value={add.duration} onChange={(e) => setAdd({ ...add, duration: e.target.value })} style={{ fontSize: 13, padding: '5px 4px' }} />
         <input type="number" min={0} max={60} placeholder="0" value={add.breakAfter} onChange={(e) => setAdd({ ...add, breakAfter: e.target.value })} style={{ fontSize: 13, padding: '5px 4px' }} />
-        <select style={{ fontSize: 13, padding: '5px 4px' }} disabled title="Set voice agent via ✏ edit">
-          <option>No agent</option>
+        <select value={add.voiceAgent} onChange={(e) => setAdd({ ...add, voiceAgent: e.target.value })} style={{ fontSize: 13, padding: '5px 4px' }}>
+          <option value="none">No agent</option>
+          <option value="male">🤖 Male agent</option>
+          <option value="female">🤖 Female agent</option>
         </select>
         <button type="submit" style={spBtn} disabled={busy || (!add.projectId && !add.customName.trim())}>+ Add</button>
       </form>
