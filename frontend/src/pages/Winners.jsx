@@ -80,7 +80,7 @@ export default function Winners() {
                 )}
                 {p.participants && p.participants.length > 0 && (
                   <div className="small" style={{ color: 'var(--accent)' }}>
-                    {p.participants.map((u) => u.email).join(', ')}
+                    {p.participants.map((u) => u.email.split('@')[0]).join(', ')}
                   </div>
                 )}
                 {p.demo_video_link && (

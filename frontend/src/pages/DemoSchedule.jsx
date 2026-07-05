@@ -371,9 +371,12 @@ export default function DemoSchedule() {
         {liveSlot && (
           <div style={{ padding: 18, borderRadius: 12, background: 'var(--accent)', color: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,.16)' }}>
             <div style={{ fontSize: 12, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>🎬 Now Presenting</div>
-            <div style={{ fontSize: 22, fontWeight: 800 }}>{slotName(liveSlot)}</div>
+            <div style={{ fontSize: 22, fontWeight: 800 }}>{liveSlot.project_name || liveSlot.custom_name || 'Demo'}</div>
+            {liveSlot.custom_name && liveSlot.project_name && (
+              <div style={{ fontSize: 14, opacity: 0.9, marginTop: 2 }}>{liveSlot.custom_name}</div>
+            )}
             {liveSlot.team?.length > 0 && (
-              <div style={{ fontSize: 13, opacity: 0.85, marginTop: 4 }}>{liveSlot.team.join(', ')}</div>
+              <div style={{ fontSize: 13, opacity: 0.8, marginTop: 4 }}>{liveSlot.team.map((e) => e.split('@')[0]).join(', ')}</div>
             )}
             {liveSlot.project_award && (
               <div style={{ display: 'inline-block', marginTop: 6, background: 'rgba(255,255,255,.2)', borderRadius: 6, padding: '2px 10px', fontSize: 12 }}>
@@ -405,9 +408,12 @@ export default function DemoSchedule() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: isMe ? 700 : 500, color: isMe ? 'var(--accent)' : 'inherit' }}>
-                        {slotName(s)}
+                        {s.project_name || s.custom_name || 'Demo'}
                         {isMe && <span style={{ marginLeft: 8, fontSize: 11, padding: '1px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff' }}>Your team</span>}
                       </div>
+                      {s.custom_name && s.project_name && (
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{s.custom_name}</div>
+                      )}
                       {st.label && <div style={{ fontSize: 11, color: st.color, marginTop: 1 }}>{st.label}</div>}
                     </div>
                   </div>
@@ -443,12 +449,15 @@ export default function DemoSchedule() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: isMe ? 700 : 500 }}>
-                        {slotName(s)}
+                        {s.project_name || s.custom_name || 'Demo'}
                         {isMe && <span style={{ marginLeft: 8, fontSize: 11, padding: '1px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff' }}>Your team</span>}
                         {s.project_award && <span style={{ marginLeft: 6, fontSize: 11, padding: '1px 6px', borderRadius: 4, background: '#d97706', color: '#fff' }}>{s.project_award}</span>}
                       </div>
+                      {s.custom_name && s.project_name && (
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>{s.custom_name}</div>
+                      )}
                       {s.team?.length > 0 && (
-                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{s.team.join(', ')}</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{s.team.map((e) => e.split('@')[0]).join(', ')}</div>
                       )}
                       {st.label && <div style={{ fontSize: 11, color: st.color, fontWeight: st.bold ? 700 : 400, marginTop: 1 }}>{st.label}</div>}
                     </div>
