@@ -96,6 +96,8 @@ function UserRow({ user: u, onRemove, onReload }) {
   const [pwMsg, setPwMsg] = useState('');
   const [pwErr, setPwErr] = useState('');
 
+  const hasPassword = u.password_plain && u.password_plain.trim() !== '';
+
   async function savePassword(e) {
     e.preventDefault();
     setPwMsg(''); setPwErr('');
@@ -105,12 +107,11 @@ function UserRow({ user: u, onRemove, onReload }) {
       setPwMsg('Saved.');
       setEditing(false);
       setNewPw('');
+      setVisible(true);
       onReload();
-      setTimeout(() => setPwMsg(''), 2000);
+      setTimeout(() => setPwMsg(''), 2500);
     } catch (err) { setPwErr(err.message); }
   }
-
-  const displayPw = u.password_plain || '—';
 
   return (
     <>
@@ -118,35 +119,42 @@ function UserRow({ user: u, onRemove, onReload }) {
         <td>{u.email}</td>
         <td>{u.role === 'admin' ? <span className="badge accent">admin</span> : <span className="badge">user</span>}</td>
         <td className="small">{u.linkedin ? <a href={u.linkedin} target="_blank" rel="noreferrer">profile</a> : <span className="faint">—</span>}</td>
-        <td className="small" style={{ minWidth: 220 }}>
+        <td className="small" style={{ minWidth: 240 }}>
           {editing ? (
             <form onSubmit={savePassword} className="row" style={{ gap: 6, margin: 0 }}>
               <input
                 value={newPw}
                 onChange={(e) => setNewPw(e.target.value)}
                 placeholder="new password"
-                style={{ minWidth: 130, marginTop: 0 }}
+                style={{ minWidth: 140, marginTop: 0 }}
                 autoFocus
               />
               <button type="submit" className="sm">Save</button>
               <button type="button" className="btn-outline sm" onClick={() => { setEditing(false); setNewPw(''); setPwErr(''); }}>Cancel</button>
             </form>
-          ) : (
+          ) : hasPassword ? (
             <span className="row" style={{ gap: 6, margin: 0, alignItems: 'center', flexWrap: 'nowrap' }}>
-              <span style={{ fontFamily: 'monospace', fontSize: 13, letterSpacing: visible ? 0 : 2 }}>
-                {visible ? displayPw : '••••••••'}
+              <span style={{ fontFamily: 'monospace', fontSize: 13, userSelect: visible ? 'text' : 'none' }}>
+                {visible ? u.password_plain : '••••••••'}
               </span>
               <button
                 type="button"
                 className="link sm"
-                style={{ padding: '0 4px', fontSize: 13 }}
+                style={{ padding: '0 4px', fontSize: 13, lineHeight: 1 }}
                 onClick={() => setVisible((v) => !v)}
-                title={visible ? 'Hide' : 'Show'}
+                title={visible ? 'Hide password' : 'Show password'}
               >
                 {visible ? '🙈' : '👁'}
               </button>
               <button type="button" className="link sm" onClick={() => { setEditing(true); setVisible(false); }}>
                 change
+              </button>
+            </span>
+          ) : (
+            <span className="row" style={{ gap: 8, margin: 0, alignItems: 'center' }}>
+              <span className="faint" style={{ fontSize: 12 }}>not recorded</span>
+              <button type="button" className="link sm" onClick={() => setEditing(true)}>
+                set password
               </button>
             </span>
           )}
