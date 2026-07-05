@@ -286,8 +286,8 @@ export default function DemoSchedule() {
   async function doManualSpeech() {
     const text = manualText;
     const voiceMode = meta.hackathon.voice_mode || 'off';
-    setManualStep('timer');
     if (text && voiceMode !== 'off') await speakVoice(text, voiceMode);
+    setManualStep('timer');
   }
 
   async function doManualOutro() {
