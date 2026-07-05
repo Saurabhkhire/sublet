@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
 
 // Create a speaker (admin only).
 router.post('/', adminOnly, async (req, res) => {
-  const { name, title, duration_minutes, scheduled_start, notes, break_after_minutes } = req.body || {};
+  const { name, title, duration_minutes, scheduled_start, notes, break_after_minutes, voice_agent, voice_script } = req.body || {};
   if (!name || !String(name).trim()) {
     return res.status(400).json({ error: 'Speaker name is required' });
   }
@@ -37,6 +37,8 @@ router.post('/', adminOnly, async (req, res) => {
     actual_end: '',
     notes: notes || '',
     break_after_minutes: Math.max(0, Number(break_after_minutes) || 0),
+    voice_agent: voice_agent || 'none',
+    voice_script: voice_script || '',
     created_at: new Date().toISOString(),
   });
   res.status(201).json(await get('SELECT * FROM speakers WHERE id = ?', [id]));
@@ -61,11 +63,12 @@ router.put('/reorder', adminOnly, async (req, res) => {
 router.put('/:id', adminOnly, async (req, res) => {
   const sp = await get('SELECT * FROM speakers WHERE id = ? AND hackathon_id = ?', [req.params.id, req.hackathonId]);
   if (!sp) return res.status(404).json({ error: 'Speaker not found' });
-  const { name, title, duration_minutes, status, scheduled_start, actual_start, actual_end, order_index, notes, break_after_minutes } = req.body || {};
+  const { name, title, duration_minutes, status, scheduled_start, actual_start, actual_end, order_index, notes, break_after_minutes, voice_agent, voice_script } = req.body || {};
   await run(
     `UPDATE speakers SET
        name = ?, title = ?, duration_minutes = ?, status = ?,
-       scheduled_start = ?, actual_start = ?, actual_end = ?, order_index = ?, notes = ?, break_after_minutes = ?
+       scheduled_start = ?, actual_start = ?, actual_end = ?, order_index = ?, notes = ?, break_after_minutes = ?,
+       voice_agent = ?, voice_script = ?
      WHERE id = ?`,
     [
       name !== undefined ? String(name).trim() || sp.name : sp.name,
@@ -78,6 +81,8 @@ router.put('/:id', adminOnly, async (req, res) => {
       order_index !== undefined ? Number(order_index) : sp.order_index,
       notes !== undefined ? notes : (sp.notes || ''),
       break_after_minutes !== undefined ? Math.max(0, Number(break_after_minutes)) : (sp.break_after_minutes || 0),
+      voice_agent !== undefined ? voice_agent : (sp.voice_agent || 'none'),
+      voice_script !== undefined ? voice_script : (sp.voice_script || ''),
       sp.id,
     ]
   );

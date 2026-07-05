@@ -328,6 +328,26 @@ export async function migrateEmailSends() {
   }
 }
 
+// Adds voice_agent + voice_script columns to speakers and demo_slots (per-slot voice playback).
+export async function migrateVoiceAgent() {
+  if (isPg) {
+    await run("ALTER TABLE speakers ADD COLUMN IF NOT EXISTS voice_agent TEXT NOT NULL DEFAULT 'none'");
+    await run("ALTER TABLE speakers ADD COLUMN IF NOT EXISTS voice_script TEXT NOT NULL DEFAULT ''");
+    await run("ALTER TABLE demo_slots ADD COLUMN IF NOT EXISTS voice_agent TEXT NOT NULL DEFAULT 'none'");
+    await run("ALTER TABLE demo_slots ADD COLUMN IF NOT EXISTS voice_script TEXT NOT NULL DEFAULT ''");
+    return;
+  }
+  const add = async (table, col, type) => {
+    if (!(await tableExists(table))) return;
+    const cols = await columnNames(table);
+    if (!cols.includes(col)) await run(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+  };
+  await add('speakers',   'voice_agent', "TEXT NOT NULL DEFAULT 'none'");
+  await add('speakers',   'voice_script', "TEXT NOT NULL DEFAULT ''");
+  await add('demo_slots', 'voice_agent', "TEXT NOT NULL DEFAULT 'none'");
+  await add('demo_slots', 'voice_script', "TEXT NOT NULL DEFAULT ''");
+}
+
 // Adds voice_enabled, submission_deadline, submission_rules, judging_rules to hackathons,
 // and creates the smtp_config table.
 export async function migrateVoiceAndRules() {

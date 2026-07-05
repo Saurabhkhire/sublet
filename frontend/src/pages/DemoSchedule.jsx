@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { get, put } from '../api.js';
+import { get, put, post } from '../api.js';
 import { useAuth } from '../auth.jsx';
 
 function playBeep(frequency = 440, duration = 0.35, vol = 0.3) {
@@ -144,6 +144,8 @@ export default function DemoSchedule() {
   const [manualStep, setManualStep] = useState(null); // null | 'speech' | 'timer' | 'outro'
   const [manualText, setManualText] = useState('');
   const [manualNextId, setManualNextId] = useState(null); // pending slot after outro
+  const [aiQuestion, setAiQuestion]   = useState('');
+  const [aiLoading, setAiLoading]     = useState(false);
 
   const timerRef   = useRef(null);
   const alerted2   = useRef(false);
@@ -204,10 +206,29 @@ export default function DemoSchedule() {
     const now = Date.now();
     setLiveStartedAt(now);
     startTimer(now);
+    if (first.voice_agent && first.voice_agent !== 'none' && first.voice_script) {
+      speakVoice(first.voice_script, first.voice_agent);
+    }
+  }
+
+  async function askQuestion() {
+    const cur = currentSlot();
+    if (!cur) return;
+    setAiLoading(true); setAiQuestion('');
+    try {
+      const res = await post(`/api/hackathons/${hid}/ai/question`, {
+        project_id: cur.project_id || undefined,
+        project_description: cur.project_description || '',
+        project_name: cur.project_name || cur.custom_name || '',
+      });
+      setAiQuestion(res.question || '');
+    } catch (e) { setAiQuestion('⚠ ' + e.message); }
+    finally { setAiLoading(false); }
   }
 
   async function advance(wasSkipped = false) {
     if (!currentId) return;
+    setAiQuestion('');
     const cur = currentSlot();
     const eligible = slots.filter((s) => s.id !== currentId && isEligible(s));
     const next = eligible[0] || null;
@@ -239,6 +260,9 @@ export default function DemoSchedule() {
         const now = Date.now();
         setLiveStartedAt(now);
         startTimer(now);
+        if (next.voice_agent && next.voice_agent !== 'none' && next.voice_script) {
+          speakVoice(next.voice_script, next.voice_agent);
+        }
       } else {
         stopTimer(); setIsLive(false); setCurrentId(null); setPendingId(null);
         await load();
@@ -519,8 +543,20 @@ export default function DemoSchedule() {
                   <button style={B_GRY_SM} onClick={togglePause}>{isPaused ? '▶ Resume' : '⏸ Pause'}</button>
                   <button style={B_SM} onClick={advance}>Next ▶</button>
                   <button style={B_AMB_SM} onClick={skipCurrent}>Skip ⏭</button>
+                  <button
+                    style={{ ...B_GRY_SM, background: '#7c3aed' }}
+                    onClick={askQuestion}
+                    disabled={aiLoading}
+                  >{aiLoading ? '⏳ Thinking…' : '🤔 Ask Question'}</button>
                 </>
               )}
+            </div>
+          )}
+          {aiQuestion && (
+            <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(255,255,255,.18)', backdropFilter: 'blur(4px)' }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4, opacity: 0.8 }}>🤔 Suggested Judge Question</div>
+              <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.45 }}>{aiQuestion}</div>
+              <button onClick={() => setAiQuestion('')} style={{ marginTop: 6, fontSize: 11, opacity: 0.7, background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>✕ dismiss</button>
             </div>
           )}
         </div>

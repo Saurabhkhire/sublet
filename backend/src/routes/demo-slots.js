@@ -8,12 +8,12 @@ router.use(authRequired, hackathonContext);
 async function slotWithProject(slot) {
   if (!slot) return null;
   if (!slot.project_id) return slot;
-  const project = await get('SELECT id, name, award_tag, judge_group FROM projects WHERE id = ?', [slot.project_id]);
+  const project = await get('SELECT id, name, award_tag, judge_group, short_description FROM projects WHERE id = ?', [slot.project_id]);
   const team = await all(
     `SELECT u.email FROM project_participants pp JOIN users u ON u.id = pp.user_id WHERE pp.project_id = ?`,
     [slot.project_id]
   );
-  return { ...slot, project_name: project?.name || '', project_award: project?.award_tag || '', project_judge_group: project?.judge_group || '', team: team.map((t) => t.email) };
+  return { ...slot, project_name: project?.name || '', project_award: project?.award_tag || '', project_judge_group: project?.judge_group || '', project_description: project?.short_description || '', team: team.map((t) => t.email) };
 }
 
 // List all demo slots with joined project info
@@ -29,7 +29,7 @@ router.get('/', async (req, res) => {
 
 // Create a demo slot (admin)
 router.post('/', adminOnly, async (req, res) => {
-  const { project_id, custom_name, duration_minutes, scheduled_start, notes, break_after_minutes } = req.body || {};
+  const { project_id, custom_name, duration_minutes, scheduled_start, notes, break_after_minutes, voice_agent, voice_script } = req.body || {};
   if (!project_id && !String(custom_name || '').trim()) {
     return res.status(400).json({ error: 'Either project_id or custom_name is required' });
   }
@@ -50,6 +50,8 @@ router.post('/', adminOnly, async (req, res) => {
     actual_end: '',
     break_after_minutes: Math.max(0, Number(break_after_minutes) || 0),
     notes: notes || '',
+    voice_agent: voice_agent || 'none',
+    voice_script: voice_script || '',
     created_at: new Date().toISOString(),
   });
   res.status(201).json(await slotWithProject(await get('SELECT * FROM demo_slots WHERE id = ?', [id])));
@@ -70,11 +72,12 @@ router.put('/reorder', adminOnly, async (req, res) => {
 router.put('/:id', adminOnly, async (req, res) => {
   const slot = await get('SELECT * FROM demo_slots WHERE id = ? AND hackathon_id = ?', [req.params.id, req.hackathonId]);
   if (!slot) return res.status(404).json({ error: 'Slot not found' });
-  const { project_id, custom_name, duration_minutes, status, scheduled_start, actual_start, actual_end, order_index, notes, break_after_minutes } = req.body || {};
+  const { project_id, custom_name, duration_minutes, status, scheduled_start, actual_start, actual_end, order_index, notes, break_after_minutes, voice_agent, voice_script } = req.body || {};
   await run(
     `UPDATE demo_slots SET
        project_id = ?, custom_name = ?, duration_minutes = ?, status = ?,
-       scheduled_start = ?, actual_start = ?, actual_end = ?, order_index = ?, notes = ?, break_after_minutes = ?
+       scheduled_start = ?, actual_start = ?, actual_end = ?, order_index = ?, notes = ?, break_after_minutes = ?,
+       voice_agent = ?, voice_script = ?
      WHERE id = ?`,
     [
       project_id !== undefined ? (project_id ? Number(project_id) : null) : slot.project_id,
@@ -87,6 +90,8 @@ router.put('/:id', adminOnly, async (req, res) => {
       order_index !== undefined ? Number(order_index) : slot.order_index,
       notes !== undefined ? notes : slot.notes,
       break_after_minutes !== undefined ? Math.max(0, Number(break_after_minutes)) : (slot.break_after_minutes || 0),
+      voice_agent !== undefined ? voice_agent : (slot.voice_agent || 'none'),
+      voice_script !== undefined ? voice_script : (slot.voice_script || ''),
       slot.id,
     ]
   );

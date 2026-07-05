@@ -265,6 +265,10 @@ export default function Schedule() {
     // Only start the timer if this is still the current activation (not superseded)
     if (activationRef.current === myActivation) {
       startTimer();
+      // Per-speaker voice agent: read the script after timer starts (fires async, runs during talk)
+      if (sp?.voice_agent && sp.voice_agent !== 'none' && sp.voice_script) {
+        speakVoice(sp.voice_script, sp.voice_agent);
+      }
     }
   }
 

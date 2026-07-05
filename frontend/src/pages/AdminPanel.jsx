@@ -511,6 +511,8 @@ function SpeakersSection({ hid }) {
         notes: editing.notes || '',
         duration_minutes: Math.max(1, Number(editing.duration) || 15),
         break_after_minutes: Math.max(0, Number(editing.breakAfter) || 0),
+        voice_agent: editing.voiceAgent || 'none',
+        voice_script: editing.voiceScript || '',
       });
       setEditing(null);
       await load();
@@ -526,6 +528,8 @@ function SpeakersSection({ hid }) {
       notes: sp.notes || '',
       duration: String(sp.duration_minutes || 15),
       breakAfter: String(sp.break_after_minutes || 0),
+      voiceAgent: sp.voice_agent || 'none',
+      voiceScript: sp.voice_script || '',
     });
   }
 
@@ -583,20 +587,23 @@ function SpeakersSection({ hid }) {
       {error && <p className="error">{error}</p>}
 
       {/* ── Column headers ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 1fr 55px 70px auto', gap: 6, padding: '4px 10px', marginBottom: 2 }}>
-        {['Start (opt.)', 'Role', 'Speaker', 'Topic', 'Min', 'Break after ☕', ''].map((h) => (
+      <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 1fr 55px 70px 110px auto', gap: 6, padding: '4px 10px', marginBottom: 2 }}>
+        {['Start (opt.)', 'Role', 'Speaker', 'Topic', 'Min', 'Break after ☕', 'Voice Agent', ''].map((h) => (
           <div key={h} className="faint" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.07em' }}>{h}</div>
         ))}
       </div>
 
       {/* ── Add row ── */}
-      <form onSubmit={addSpeaker} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 1fr 55px 70px auto', gap: 6, marginBottom: 12, alignItems: 'center' }}>
+      <form onSubmit={addSpeaker} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 1fr 55px 70px 110px auto', gap: 6, marginBottom: 12, alignItems: 'center' }}>
         <input type="time" value={add.time}      onChange={(e) => setAdd({ ...add, time: e.target.value })}      style={{ fontSize: 13, padding: '5px 6px' }} />
         <input placeholder="Keynote, Workshop…"   value={add.segment}    onChange={(e) => setAdd({ ...add, segment: e.target.value })}    style={{ fontSize: 13 }} />
         <input placeholder="Alice Smith"         value={add.speaker}    onChange={(e) => setAdd({ ...add, speaker: e.target.value })}    style={{ fontSize: 13 }} />
         <input placeholder="AI trends in 2026…" value={add.notes}      onChange={(e) => setAdd({ ...add, notes: e.target.value })}      style={{ fontSize: 13 }} />
         <input type="number" min={1} max={300}   value={add.duration}   onChange={(e) => setAdd({ ...add, duration: e.target.value })}   style={{ fontSize: 13, padding: '5px 4px' }} />
         <input type="number" min={0} max={120} placeholder="0 min" value={add.breakAfter} onChange={(e) => setAdd({ ...add, breakAfter: e.target.value })} style={{ fontSize: 13, padding: '5px 4px' }} />
+        <select style={{ fontSize: 13, padding: '5px 4px' }} disabled title="Set voice agent via ✏ edit">
+          <option>No agent</option>
+        </select>
         <button type="submit" style={spBtn} disabled={addBusy || (!add.speaker.trim() && !add.segment.trim())}>
           {addBusy ? '…' : '+ Add'}
         </button>
@@ -622,8 +629,8 @@ function SpeakersSection({ hid }) {
               onDrop={() => { commitDrag(dragSrc, idx); setDragSrc(null); setDragOver(null); }}
               style={{
                 display: 'grid',
-                gridTemplateColumns: '24px 80px 1fr 1fr 1fr 55px 70px auto',
-                gap: 6, alignItems: 'center',
+                gridTemplateColumns: '24px 80px 1fr 1fr 1fr 55px 70px 110px auto',
+                gap: 6, alignItems: isEdit ? 'start' : 'center',
                 padding: '7px 10px', borderRadius: 6,
                 border: isDropTarget ? '1.5px dashed var(--accent)' : '1.5px solid var(--border)',
                 background: 'var(--surface-2)',
@@ -642,10 +649,23 @@ function SpeakersSection({ hid }) {
                   <input value={editing.notes}               onChange={(e) => setEditing({ ...editing, notes: e.target.value })}      style={{ fontSize: 12, padding: '3px 6px' }} placeholder="What happens" />
                   <input type="number" min={1} max={300} value={editing.duration}   onChange={(e) => setEditing({ ...editing, duration: e.target.value })}   style={{ fontSize: 12, padding: '3px 4px' }} />
                   <input type="number" min={0} max={120} value={editing.breakAfter} onChange={(e) => setEditing({ ...editing, breakAfter: e.target.value })} style={{ fontSize: 12, padding: '3px 4px' }} placeholder="0" />
+                  <select value={editing.voiceAgent} onChange={(e) => setEditing({ ...editing, voiceAgent: e.target.value })} style={{ fontSize: 12, padding: '3px 4px' }}>
+                    <option value="none">No agent</option>
+                    <option value="male">🤖 Male agent</option>
+                    <option value="female">🤖 Female agent</option>
+                  </select>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button style={spBtn} onClick={saveEdit}>Save</button>
                     <button style={spBtnGry} onClick={() => setEditing(null)}>✕</button>
                   </div>
+                  {editing.voiceAgent !== 'none' && (
+                    <textarea
+                      value={editing.voiceScript}
+                      onChange={(e) => setEditing({ ...editing, voiceScript: e.target.value })}
+                      placeholder="Write the script that will be read aloud when this speaker's timer starts…"
+                      style={{ gridColumn: '1 / -1', fontSize: 12, padding: '6px 8px', minHeight: 80, resize: 'vertical', borderRadius: 4, border: '1px solid var(--border)', marginTop: 2 }}
+                    />
+                  )}
                 </>
               ) : (
                 <>
@@ -673,6 +693,12 @@ function SpeakersSection({ hid }) {
                   {/* Break after */}
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                     {sp.break_after_minutes > 0 ? `${sp.break_after_minutes} min` : <span style={{ opacity: 0.35 }}>—</span>}
+                  </div>
+                  {/* Voice agent */}
+                  <div style={{ fontSize: 11 }}>
+                    {sp.voice_agent && sp.voice_agent !== 'none'
+                      ? <span style={{ background: '#6366f1', color: '#fff', borderRadius: 4, padding: '1px 6px' }}>🤖 {sp.voice_agent}</span>
+                      : <span style={{ opacity: 0.35 }}>—</span>}
                   </div>
                   {/* Actions */}
                   <div style={{ display: 'flex', gap: 3 }}>
@@ -977,6 +1003,8 @@ function DemoSlotsSection({ hid }) {
         custom_name: editing.customName || '',
         duration_minutes: Math.max(1, Number(editing.duration) || 10),
         break_after_minutes: Math.max(0, Number(editing.breakAfter) || 0),
+        voice_agent: editing.voiceAgent || 'none',
+        voice_script: editing.voiceScript || '',
       });
       setEditing(null); await load();
     } catch (err) { setError(err.message); }
@@ -1019,14 +1047,14 @@ function DemoSlotsSection({ hid }) {
       {error && <p className="error">{error}</p>}
 
       {/* Column headers */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 55px 65px auto', gap: 6, padding: '4px 10px', marginBottom: 2 }}>
-        {['Project / Name', 'Custom label', 'Min', 'Break ☕', ''].map((h) => (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 55px 65px 110px auto', gap: 6, padding: '4px 10px', marginBottom: 2 }}>
+        {['Project / Name', 'Custom label', 'Min', 'Break ☕', 'Voice Agent', ''].map((h) => (
           <div key={h} className="faint" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.07em' }}>{h}</div>
         ))}
       </div>
 
       {/* Add row */}
-      <form onSubmit={addSlot} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 55px 65px auto', gap: 6, marginBottom: 12, alignItems: 'center' }}>
+      <form onSubmit={addSlot} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 55px 65px 110px auto', gap: 6, marginBottom: 12, alignItems: 'center' }}>
         <select value={add.projectId} onChange={(e) => setAdd({ ...add, projectId: e.target.value })} style={{ fontSize: 13, padding: '5px 6px' }}>
           <option value="">— Custom slot —</option>
           {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -1034,6 +1062,9 @@ function DemoSlotsSection({ hid }) {
         <input placeholder="Opening, Awards…" value={add.customName} onChange={(e) => setAdd({ ...add, customName: e.target.value })} style={{ fontSize: 13 }} />
         <input type="number" min={1} max={120} value={add.duration} onChange={(e) => setAdd({ ...add, duration: e.target.value })} style={{ fontSize: 13, padding: '5px 4px' }} />
         <input type="number" min={0} max={60} placeholder="0" value={add.breakAfter} onChange={(e) => setAdd({ ...add, breakAfter: e.target.value })} style={{ fontSize: 13, padding: '5px 4px' }} />
+        <select style={{ fontSize: 13, padding: '5px 4px' }} disabled title="Set voice agent via ✏ edit">
+          <option>No agent</option>
+        </select>
         <button type="submit" style={spBtn} disabled={busy || (!add.projectId && !add.customName.trim())}>+ Add</button>
       </form>
 
@@ -1043,7 +1074,7 @@ function DemoSlotsSection({ hid }) {
           const isEdit = editing?.id === s.id;
           const name = s.custom_name || s.project_name || 'Demo';
           return (
-            <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 1fr 55px 65px auto', gap: 6, alignItems: 'center', padding: '7px 10px', borderRadius: 6, border: '1.5px solid var(--border)', background: 'var(--surface-2)' }}>
+            <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 1fr 55px 65px 110px auto', gap: 6, alignItems: isEdit ? 'start' : 'center', padding: '7px 10px', borderRadius: 6, border: '1.5px solid var(--border)', background: 'var(--surface-2)' }}>
               <span style={{ color: 'var(--muted)', fontSize: 13, userSelect: 'none' }}>⠿</span>
               {isEdit ? (
                 <>
@@ -1054,10 +1085,23 @@ function DemoSlotsSection({ hid }) {
                   <input value={editing.customName} onChange={(e) => setEditing({ ...editing, customName: e.target.value })} style={{ fontSize: 12, padding: '3px 6px' }} placeholder="Label" />
                   <input type="number" min={1} max={120} value={editing.duration} onChange={(e) => setEditing({ ...editing, duration: e.target.value })} style={{ fontSize: 12, padding: '3px 4px' }} />
                   <input type="number" min={0} max={60} value={editing.breakAfter} onChange={(e) => setEditing({ ...editing, breakAfter: e.target.value })} style={{ fontSize: 12, padding: '3px 4px' }} />
+                  <select value={editing.voiceAgent} onChange={(e) => setEditing({ ...editing, voiceAgent: e.target.value })} style={{ fontSize: 12, padding: '3px 4px' }}>
+                    <option value="none">No agent</option>
+                    <option value="male">🤖 Male agent</option>
+                    <option value="female">🤖 Female agent</option>
+                  </select>
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button style={spBtn} onClick={saveEdit}>Save</button>
                     <button style={spBtnGry} onClick={() => setEditing(null)}>✕</button>
                   </div>
+                  {editing.voiceAgent !== 'none' && (
+                    <textarea
+                      value={editing.voiceScript}
+                      onChange={(e) => setEditing({ ...editing, voiceScript: e.target.value })}
+                      placeholder="Write the script that will be read aloud when this demo slot's timer starts…"
+                      style={{ gridColumn: '1 / -1', fontSize: 12, padding: '6px 8px', minHeight: 80, resize: 'vertical', borderRadius: 4, border: '1px solid var(--border)', marginTop: 2 }}
+                    />
+                  )}
                 </>
               ) : (
                 <>
@@ -1079,10 +1123,15 @@ function DemoSlotsSection({ hid }) {
                   <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                     {s.break_after_minutes > 0 ? `${s.break_after_minutes} min` : <span style={{ opacity: 0.35 }}>—</span>}
                   </div>
+                  <div style={{ fontSize: 11 }}>
+                    {s.voice_agent && s.voice_agent !== 'none'
+                      ? <span style={{ background: '#6366f1', color: '#fff', borderRadius: 4, padding: '1px 6px' }}>🤖 {s.voice_agent}</span>
+                      : <span style={{ opacity: 0.35 }}>—</span>}
+                  </div>
                   <div style={{ display: 'flex', gap: 3 }}>
                     <button style={spBtnGry} onClick={() => move(idx, -1)} disabled={idx === 0}>↑</button>
                     <button style={spBtnGry} onClick={() => move(idx, 1)} disabled={idx === slots.length - 1}>↓</button>
-                    <button style={spBtnSm} onClick={() => setEditing({ id: s.id, projectId: s.project_id ? String(s.project_id) : '', customName: s.custom_name || '', duration: String(s.duration_minutes), breakAfter: String(s.break_after_minutes || 0) })}>✏</button>
+                    <button style={spBtnSm} onClick={() => setEditing({ id: s.id, projectId: s.project_id ? String(s.project_id) : '', customName: s.custom_name || '', duration: String(s.duration_minutes), breakAfter: String(s.break_after_minutes || 0), voiceAgent: s.voice_agent || 'none', voiceScript: s.voice_script || '' })}>✏</button>
                     <button style={spBtnRed} onClick={() => deleteSlot(s.id)}>✕</button>
                   </div>
                 </>

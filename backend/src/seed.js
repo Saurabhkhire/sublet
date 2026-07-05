@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { pathToFileURL } from 'node:url';
 import bcrypt from 'bcryptjs';
 import { createSchema } from './schema.js';
-import { migrateLegacy, migrateScores, migrateInvestment, migrateHackathonInfo, migrateSpeakerNotes, migrateSpeakerBreak, migrateJudgingGroups, migrateDemoSlots, migrateVoiceAndRules, migrateEmailSends } from './migrate.js';
+import { migrateLegacy, migrateScores, migrateInvestment, migrateHackathonInfo, migrateSpeakerNotes, migrateSpeakerBreak, migrateJudgingGroups, migrateDemoSlots, migrateVoiceAndRules, migrateEmailSends, migrateVoiceAgent } from './migrate.js';
 import { get, run, insert } from './db.js';
 
 // Idempotent: ensures the admin account exists and (on a fresh DB) seeds one sample
@@ -19,6 +19,7 @@ export async function ensureSeed() {
   await migrateDemoSlots();     // add demo day schedule table
   await migrateVoiceAndRules(); // add voice_enabled, deadline, rules + smtp_config table
   await migrateEmailSends();    // add email_sends tracking table (send-once per user+type)
+  await migrateVoiceAgent();    // add voice_agent + voice_script to speakers and demo_slots
 
   // Admin account — credentials come from the environment (defaults: admin123 / admin123).
   const adminEmail = process.env.ADMIN_EMAIL || 'admin123';
