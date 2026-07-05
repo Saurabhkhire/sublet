@@ -11,6 +11,7 @@ export async function createSchema() {
       id ${PK},
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
+      password_plain TEXT NOT NULL DEFAULT '',
       linkedin TEXT,
       role TEXT NOT NULL DEFAULT 'user',
       created_at TEXT NOT NULL DEFAULT '1970-01-01'

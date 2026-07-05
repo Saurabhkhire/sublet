@@ -80,7 +80,7 @@ export default function Users() {
           </thead>
           <tbody>
             {users.map((u) => (
-              <UserRow key={u.id} user={u} onRemove={removeUser} />
+              <UserRow key={u.id} user={u} onRemove={removeUser} onReload={load} />
             ))}
           </tbody>
         </table>
@@ -89,23 +89,28 @@ export default function Users() {
   );
 }
 
-function UserRow({ user: u, onRemove }) {
-  const [resetting, setResetting] = useState(false);
+function UserRow({ user: u, onRemove, onReload }) {
+  const [editing, setEditing] = useState(false);
   const [newPw, setNewPw] = useState('');
+  const [visible, setVisible] = useState(false);
   const [pwMsg, setPwMsg] = useState('');
   const [pwErr, setPwErr] = useState('');
 
   async function savePassword(e) {
     e.preventDefault();
     setPwMsg(''); setPwErr('');
-    if (!newPw.trim()) { setPwErr('Enter a new password.'); return; }
+    if (!newPw.trim()) { setPwErr('Enter a password.'); return; }
     try {
       await put(`/api/admin/users/${u.id}`, { password: newPw });
-      setPwMsg('Password updated.');
+      setPwMsg('Saved.');
+      setEditing(false);
       setNewPw('');
-      setTimeout(() => { setPwMsg(''); setResetting(false); }, 1500);
+      onReload();
+      setTimeout(() => setPwMsg(''), 2000);
     } catch (err) { setPwErr(err.message); }
   }
+
+  const displayPw = u.password_plain || '—';
 
   return (
     <>
@@ -113,8 +118,8 @@ function UserRow({ user: u, onRemove }) {
         <td>{u.email}</td>
         <td>{u.role === 'admin' ? <span className="badge accent">admin</span> : <span className="badge">user</span>}</td>
         <td className="small">{u.linkedin ? <a href={u.linkedin} target="_blank" rel="noreferrer">profile</a> : <span className="faint">—</span>}</td>
-        <td className="small">
-          {resetting ? (
+        <td className="small" style={{ minWidth: 220 }}>
+          {editing ? (
             <form onSubmit={savePassword} className="row" style={{ gap: 6, margin: 0 }}>
               <input
                 value={newPw}
@@ -123,11 +128,27 @@ function UserRow({ user: u, onRemove }) {
                 style={{ minWidth: 130, marginTop: 0 }}
                 autoFocus
               />
-              <button type="submit" className="sm">Set</button>
-              <button type="button" className="btn-outline sm" onClick={() => { setResetting(false); setNewPw(''); setPwErr(''); }}>Cancel</button>
+              <button type="submit" className="sm">Save</button>
+              <button type="button" className="btn-outline sm" onClick={() => { setEditing(false); setNewPw(''); setPwErr(''); }}>Cancel</button>
             </form>
           ) : (
-            <button className="link sm" onClick={() => setResetting(true)}>Reset password</button>
+            <span className="row" style={{ gap: 6, margin: 0, alignItems: 'center', flexWrap: 'nowrap' }}>
+              <span style={{ fontFamily: 'monospace', fontSize: 13, letterSpacing: visible ? 0 : 2 }}>
+                {visible ? displayPw : '••••••••'}
+              </span>
+              <button
+                type="button"
+                className="link sm"
+                style={{ padding: '0 4px', fontSize: 13 }}
+                onClick={() => setVisible((v) => !v)}
+                title={visible ? 'Hide' : 'Show'}
+              >
+                {visible ? '🙈' : '👁'}
+              </button>
+              <button type="button" className="link sm" onClick={() => { setEditing(true); setVisible(false); }}>
+                change
+              </button>
+            </span>
           )}
           {pwMsg && <span className="success small" style={{ marginLeft: 8 }}>{pwMsg}</span>}
           {pwErr && <span className="error small" style={{ marginLeft: 8 }}>{pwErr}</span>}

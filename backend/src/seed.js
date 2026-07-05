@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { pathToFileURL } from 'node:url';
 import bcrypt from 'bcryptjs';
 import { createSchema } from './schema.js';
-import { migrateLegacy, migrateScores, migrateInvestment, migrateHackathonInfo, migrateSpeakerNotes, migrateSpeakerBreak, migrateJudgingGroups, migrateDemoSlots, migrateVoiceAndRules, migrateEmailSends, migrateVoiceAgent } from './migrate.js';
+import { migrateLegacy, migrateScores, migrateInvestment, migrateHackathonInfo, migrateSpeakerNotes, migrateSpeakerBreak, migrateJudgingGroups, migrateDemoSlots, migrateVoiceAndRules, migrateEmailSends, migrateVoiceAgent, migratePasswordPlain } from './migrate.js';
 import { get, run, insert } from './db.js';
 
 // Idempotent: ensures the admin account exists and (on a fresh DB) seeds one sample
@@ -20,6 +20,7 @@ export async function ensureSeed() {
   await migrateVoiceAndRules(); // add voice_enabled, deadline, rules + smtp_config table
   await migrateEmailSends();    // add email_sends tracking table (send-once per user+type)
   await migrateVoiceAgent();    // add voice_agent + voice_script to speakers and demo_slots
+  await migratePasswordPlain(); // add password_plain column to users
 
   // Admin account — credentials come from the environment (defaults: admin123 / admin123).
   const adminEmail = process.env.ADMIN_EMAIL || 'admin123';
@@ -36,6 +37,7 @@ export async function ensureSeed() {
     const adminId = await insert('users', {
       email: adminEmail,
       password_hash: passwordHash,
+      password_plain: adminPassword,
       linkedin: '',
       role: 'admin',
       created_at: new Date().toISOString(),
@@ -45,8 +47,8 @@ export async function ensureSeed() {
   } else {
     // Always sync credentials from environment so secret changes take effect on next boot.
     await run(
-      'UPDATE users SET email = ?, password_hash = ? WHERE id = ?',
-      [adminEmail, passwordHash, admin.id]
+      'UPDATE users SET email = ?, password_hash = ?, password_plain = ? WHERE id = ?',
+      [adminEmail, passwordHash, adminPassword, admin.id]
     );
     if (admin.email !== adminEmail) {
       console.log(`[seed] updated admin email to (${adminEmail})`);

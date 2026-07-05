@@ -328,6 +328,19 @@ export async function migrateEmailSends() {
   }
 }
 
+// Adds password_plain column to users so admins can view/set plaintext passwords.
+export async function migratePasswordPlain() {
+  if (isPg) {
+    await run("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_plain TEXT NOT NULL DEFAULT ''");
+    return;
+  }
+  if (!(await tableExists('users'))) return;
+  const cols = await columnNames('users');
+  if (!cols.includes('password_plain')) {
+    await run("ALTER TABLE users ADD COLUMN password_plain TEXT NOT NULL DEFAULT ''");
+  }
+}
+
 // Adds voice_agent + voice_script columns to speakers and demo_slots (per-slot voice playback).
 export async function migrateVoiceAgent() {
   if (isPg) {

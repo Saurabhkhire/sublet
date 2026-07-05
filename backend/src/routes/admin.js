@@ -11,12 +11,12 @@ router.get('/users', async (req, res) => {
   const search = (req.query.search || '').trim();
   if (search) {
     const rows = await all(
-      'SELECT id, email, linkedin, role FROM users WHERE email LIKE ? ORDER BY email LIMIT 20',
+      'SELECT id, email, password_plain, linkedin, role FROM users WHERE email LIKE ? ORDER BY email LIMIT 20',
       [`%${search}%`]
     );
     return res.json(rows);
   }
-  res.json(await all('SELECT id, email, linkedin, role, created_at FROM users ORDER BY email'));
+  res.json(await all('SELECT id, email, password_plain, linkedin, role, created_at FROM users ORDER BY email'));
 });
 
 router.post('/users', async (req, res) => {
@@ -29,11 +29,12 @@ router.post('/users', async (req, res) => {
   const id = await insert('users', {
     email,
     password_hash: bcrypt.hashSync(String(password), 10),
+    password_plain: String(password),
     linkedin: linkedin || '',
     role: 'user',
     created_at: new Date().toISOString(),
   });
-  res.status(201).json({ id, email, linkedin: linkedin || '', role: 'user' });
+  res.status(201).json({ id, email, password_plain: String(password), linkedin: linkedin || '', role: 'user' });
 });
 
 // Delete ALL non-admin users at once (and their related data). Any project left with no
@@ -66,8 +67,10 @@ router.put('/users/:id', async (req, res) => {
   if (!password || !String(password).trim()) {
     return res.status(400).json({ error: 'New password is required' });
   }
-  await run('UPDATE users SET password_hash = ? WHERE id = ?', [
-    bcrypt.hashSync(String(password).trim(), 10),
+  const plain = String(password).trim();
+  await run('UPDATE users SET password_hash = ?, password_plain = ? WHERE id = ?', [
+    bcrypt.hashSync(plain, 10),
+    plain,
     target.id,
   ]);
   res.json({ ok: true });
