@@ -71,6 +71,13 @@ function fmtSecs(secs) {
   const a = Math.abs(Math.round(secs));
   return `${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`;
 }
+function getNowClock() {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
 
 // Format HH:MM → 9:05 AM
 function fmtTime(hhmm) {
@@ -149,6 +156,11 @@ export default function Schedule() {
   const [pendingId, setPendingId]   = useState(null); // on-deck: advanced but timer not started yet
   const [elapsed, setElapsed]       = useState(0);
   const [liveStartedAt, setLiveStartedAt] = useState(null);
+  const [wallClock, setWallClock]   = useState(getNowClock);
+  useEffect(() => {
+    const iv = setInterval(() => setWallClock(getNowClock()), 1000);
+    return () => clearInterval(iv);
+  }, []);
   const autoStart = meta.hackathon.auto_stop_speaker !== 0;
   const [manualStep, setManualStep] = useState(null); // null | 'speech' | 'timer'
   const [manualText, setManualText] = useState('');
@@ -542,10 +554,19 @@ export default function Schedule() {
           {current.title && <div className="muted small" style={{ marginBottom: 4 }}>{current.title}</div>}
           {current.notes && <div className="faint small" style={{ marginBottom: 18 }}>{current.notes}</div>}
 
+          {/* Wall clock */}
+          <div style={{
+            fontSize: 22, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+            letterSpacing: '0.05em', marginBottom: 2, marginTop: current.notes ? 0 : 12,
+            color: 'var(--accent)',
+          }}>
+            🕐 {wallClock}
+          </div>
+
           {/* Big timer */}
           <div style={{
             fontSize: 80, fontWeight: 900, lineHeight: 1, letterSpacing: '-2px',
-            fontVariantNumeric: 'tabular-nums', color: timerColor, marginBottom: 6, marginTop: current.notes ? 0 : 18,
+            fontVariantNumeric: 'tabular-nums', color: timerColor, marginBottom: 6, marginTop: 8,
           }}>
             {isOvertime ? '+' : ''}{fmtSecs(Math.abs(timeLeft))}
           </div>

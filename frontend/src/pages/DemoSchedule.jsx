@@ -65,6 +65,13 @@ function fmtSecs(secs) {
   const a = Math.abs(Math.round(secs));
   return `${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`;
 }
+function getNowClock() {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
 function fmtTime(hhmm) {
   if (!hhmm) return '';
   const [hh, mm] = hhmm.split(':').map(Number);
@@ -140,6 +147,11 @@ export default function DemoSchedule() {
   const [pendingId, setPendingId]   = useState(null);
   const [elapsed, setElapsed]       = useState(0);
   const [liveStartedAt, setLiveStartedAt] = useState(null);
+  const [wallClock, setWallClock]   = useState(getNowClock);
+  useEffect(() => {
+    const iv = setInterval(() => setWallClock(getNowClock()), 1000);
+    return () => clearInterval(iv);
+  }, []);
   const autoStart = meta.hackathon.auto_advance_demo !== 0;
   const [manualStep, setManualStep] = useState(null); // null | 'speech' | 'timer' | 'outro'
   const [manualText, setManualText] = useState('');
@@ -530,7 +542,13 @@ export default function DemoSchedule() {
               {cur.project_award}
             </div>
           )}
-          <div style={{ fontSize: 60, fontVariantNumeric: 'tabular-nums', fontWeight: 900, lineHeight: 1, margin: '12px 0', color: overTime ? '#fde68a' : '#fff' }}>
+          <div style={{
+            fontSize: 20, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+            letterSpacing: '0.05em', marginTop: 10, marginBottom: 2, opacity: 0.92,
+          }}>
+            🕐 {wallClock}
+          </div>
+          <div style={{ fontSize: 60, fontVariantNumeric: 'tabular-nums', fontWeight: 900, lineHeight: 1, margin: '8px 0 12px', color: overTime ? '#fde68a' : '#fff' }}>
             {overTime ? '+' : ''}{fmtSecs(Math.abs(remaining))}
           </div>
           {isPaused && <div style={{ fontSize: 14, opacity: 0.8, marginBottom: 8 }}>⏸ Paused</div>}
