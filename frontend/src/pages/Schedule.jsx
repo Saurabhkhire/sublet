@@ -322,6 +322,10 @@ export default function Schedule() {
     setManualStep(null);
     setManualText('');
     startTimer();
+    const sp = speakers.find((s) => s.id === currentId);
+    if (sp?.voice_agent && sp.voice_agent !== 'none' && sp.voice_script) {
+      speakVoice(sp.voice_script, sp.voice_agent);
+    }
   }
 
   async function finishAndAdvance(status) {

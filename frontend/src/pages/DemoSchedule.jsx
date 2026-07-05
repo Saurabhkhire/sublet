@@ -305,6 +305,10 @@ export default function DemoSchedule() {
     const now = Date.now();
     setLiveStartedAt(now);
     startTimer(now);
+    const cur = currentSlot();
+    if (cur?.voice_agent && cur.voice_agent !== 'none' && cur.voice_script) {
+      speakVoice(cur.voice_script, cur.voice_agent);
+    }
   }
 
   async function startPending() {
@@ -330,6 +334,9 @@ export default function DemoSchedule() {
     const now = Date.now();
     setLiveStartedAt(now);
     startTimer(now);
+    if (pending?.voice_agent && pending.voice_agent !== 'none' && pending.voice_script) {
+      speakVoice(pending.voice_script, pending.voice_agent);
+    }
   }
 
   async function skipCurrent() {
