@@ -192,15 +192,20 @@ export default function Schedule() {
       ? speakers.find((s, i) => i > pendingIdx && isEligible(s)) || null
       : null;
 
-  // When live, anchor all times to the actual clock time Start was pressed.
-  // When not live, use the hackathon's configured start_time (tentative).
-  const liveBase = liveStartedAt
-    ? `${String(liveStartedAt.getHours()).padStart(2, '0')}:${String(liveStartedAt.getMinutes()).padStart(2, '0')}`
-    : null;
+  // Base time for the schedule cascade:
+  // 1. liveStartedAt (set when Start is pressed this session)
+  // 2. first speaker's actual_start from DB (survives page reloads)
+  // 3. current PC clock time (never fall back to the configured 9 AM)
+  const toHHMM = (d) => `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  const liveBase = (() => {
+    if (liveStartedAt) return toHHMM(liveStartedAt);
+    const first = speakers.find((s) => s.actual_start);
+    if (first) return toHHMM(new Date(first.actual_start));
+    return toHHMM(new Date());
+  })();
   const scheduledTimes = calcScheduledTimes(
-    // When live, ignore per-speaker scheduled_start overrides so everything cascades from the real start
     isLive ? speakers.map((s) => ({ ...s, scheduled_start: '' })) : speakers,
-    liveBase ?? (meta.hackathon.start_time || ''),
+    liveBase,
   );
   const timerColor     = isOvertime ? '#dc2626' : timeLeft <= 60 ? '#d97706' : 'inherit';
 

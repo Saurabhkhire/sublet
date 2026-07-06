@@ -83,7 +83,8 @@ export default function JudgingGroups() {
   const assigned = data.config?.assigned_at;
   const jt = data.config?.judge_time_minutes;
   const pp = data.config?.per_project_minutes;
-  const startStr = meta.hackathon?.start_time;
+  const nowHHMM = (() => { const d = new Date(); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; })();
+  const startStr = meta.hackathon?.start_time || nowHHMM;
   const timedSlots = computeDemoTimes(demoSlots, startStr);
   const demoByGroup = {};
   for (const s of timedSlots) {

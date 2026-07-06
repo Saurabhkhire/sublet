@@ -372,13 +372,20 @@ export default function DemoSchedule() {
   }
 
   // When live, anchor the schedule to the actual clock time the event started.
-  // When not live, use the hackathon's configured start_time (tentative).
-  const liveBase = (isLive && liveStartedAt)
-    ? (() => { const d = new Date(liveStartedAt); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; })()
-    : null;
+  // Base time for the schedule cascade:
+  // 1. liveStartedAt (set when Start is pressed this session)
+  // 2. first slot's actual_start from DB (survives page reloads)
+  // 3. current PC clock time (never fall back to the configured 9 AM)
+  const toHHMM = (d) => `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  const liveBase = (() => {
+    if (liveStartedAt) return toHHMM(new Date(liveStartedAt));
+    const first = slots.find((s) => s.actual_start);
+    if (first) return toHHMM(new Date(first.actual_start));
+    return toHHMM(new Date());
+  })();
   const times = calcTimes(
     isLive ? slots.map((s) => ({ ...s, scheduled_start: '' })) : slots,
-    liveBase ?? (meta.hackathon?.start_time || ''),
+    liveBase,
   );
   // Build a quick lookup: slot.id → display time
   const slotTimeMap = {};
