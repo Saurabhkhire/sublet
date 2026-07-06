@@ -27,7 +27,7 @@ export default function HackathonLayout() {
     { to: `/h/${hid}`, label: 'Overview', icon: '◆', end: true },
     { to: `/h/${hid}/matching`, label: 'Team Matching', icon: '⚇' },
     { to: `/h/${hid}/submit`, label: 'Submit Project', icon: '➜' },
-    { to: `/h/${hid}/schedule`, label: 'Schedule', icon: '🎤' },
+    { to: `/h/${hid}/schedule`, label: 'Speaking Schedule', icon: '🎤' },
     ...(meta.is_judge ? [{ to: `/h/${hid}/judging`, label: 'Judging', icon: '★' }] : []),
     { to: `/h/${hid}/judging-groups`, label: 'Project Demo Groups', icon: '⚖' },
     { to: `/h/${hid}/demo`, label: 'Final Demos', icon: '🎬' },

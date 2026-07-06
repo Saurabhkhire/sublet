@@ -65,12 +65,14 @@ function fmtSecs(secs) {
   const a = Math.abs(Math.round(secs));
   return `${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`;
 }
-function getNowClock() {
-  const d = new Date();
-  const hh = String(d.getHours()).padStart(2, '0');
+function fmtActualTime(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d)) return null;
+  const hh = d.getHours();
   const mm = String(d.getMinutes()).padStart(2, '0');
   const ss = String(d.getSeconds()).padStart(2, '0');
-  return `${hh}:${mm}:${ss}`;
+  return `${hh % 12 || 12}:${mm}:${ss} ${hh >= 12 ? 'PM' : 'AM'}`;
 }
 function fmtTime(hhmm) {
   if (!hhmm) return '';
@@ -147,11 +149,6 @@ export default function DemoSchedule() {
   const [pendingId, setPendingId]   = useState(null);
   const [elapsed, setElapsed]       = useState(0);
   const [liveStartedAt, setLiveStartedAt] = useState(null);
-  const [wallClock, setWallClock]   = useState(getNowClock);
-  useEffect(() => {
-    const iv = setInterval(() => setWallClock(getNowClock()), 1000);
-    return () => clearInterval(iv);
-  }, []);
   const autoStart = meta.hackathon.auto_advance_demo !== 0;
   const [manualStep, setManualStep] = useState(null); // null | 'speech' | 'timer' | 'outro'
   const [manualText, setManualText] = useState('');
@@ -542,13 +539,7 @@ export default function DemoSchedule() {
               {cur.project_award}
             </div>
           )}
-          <div style={{
-            fontSize: 20, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-            letterSpacing: '0.05em', marginTop: 10, marginBottom: 2, opacity: 0.92,
-          }}>
-            🕐 {wallClock}
-          </div>
-          <div style={{ fontSize: 60, fontVariantNumeric: 'tabular-nums', fontWeight: 900, lineHeight: 1, margin: '8px 0 12px', color: overTime ? '#fde68a' : '#fff' }}>
+          <div style={{ fontSize: 60, fontVariantNumeric: 'tabular-nums', fontWeight: 900, lineHeight: 1, margin: '12px 0', color: overTime ? '#fde68a' : '#fff' }}>
             {overTime ? '+' : ''}{fmtSecs(Math.abs(remaining))}
           </div>
           {isPaused && <div style={{ fontSize: 14, opacity: 0.8, marginBottom: 8 }}>⏸ Paused</div>}
@@ -639,7 +630,13 @@ export default function DemoSchedule() {
               borderBottom: idx < slots.length - 1 ? '1px solid var(--border)' : 'none',
             }}>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 12, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{times[idx] || '—'}</div>
+                <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                  {s.actual_start ? (
+                    <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{fmtActualTime(s.actual_start)}</span>
+                  ) : (
+                    <span style={{ color: 'var(--muted)' }}>{times[idx] || '—'}</span>
+                  )}
+                </div>
                 <div style={{ fontSize: 11, color: 'var(--muted)' }}>{s.duration_minutes} min</div>
               </div>
               <div>
