@@ -215,9 +215,6 @@ export default function DemoSchedule() {
     const now = Date.now();
     setLiveStartedAt(now);
     startTimer(now);
-    if (first.voice_agent && first.voice_agent !== 'none' && first.voice_script) {
-      speakVoice(first.voice_script, first.voice_agent);
-    }
   }
 
   async function askQuestion() {
@@ -246,9 +243,14 @@ export default function DemoSchedule() {
     if (autoStart || !next) {
       if (cur) await put(`${base}/${cur.id}`, { status: 'completed', actual_end: new Date().toISOString() });
 
-      // Thank-you announcement only when demo finishes normally (not skipped)
+      // Outro announcement only when demo finishes normally (not skipped).
+      // If the slot has a custom voice script, play that; otherwise the default "thank you".
       if (cur && !wasSkipped && voiceMode !== 'off') {
-        await speakVoice(slotOutroText(cur), voiceMode);
+        if (cur.voice_agent && cur.voice_agent !== 'none' && cur.voice_script) {
+          await speakVoice(cur.voice_script, cur.voice_agent);
+        } else {
+          await speakVoice(slotOutroText(cur), voiceMode);
+        }
       }
 
       if (next) {
@@ -269,9 +271,6 @@ export default function DemoSchedule() {
         const now = Date.now();
         setLiveStartedAt(now);
         startTimer(now);
-        if (next.voice_agent && next.voice_agent !== 'none' && next.voice_script) {
-          speakVoice(next.voice_script, next.voice_agent);
-        }
       } else {
         stopTimer(); setIsLive(false); setCurrentId(null); setPendingId(null);
         await load();
@@ -280,8 +279,12 @@ export default function DemoSchedule() {
       if (cur) await put(`${base}/${cur.id}`, { status: 'completed', actual_end: new Date().toISOString() });
       stopTimer();
       if (cur && !wasSkipped && voiceMode !== 'off') {
-        // In manual mode: show "Speak Outro" button first, then proceed to pending
-        setManualText(slotOutroText(cur));
+        // In manual mode: show "Speak Outro" button first, then proceed to pending.
+        // Use custom voice script as outro if configured; otherwise default "thank you".
+        const outroText = (cur.voice_agent && cur.voice_agent !== 'none' && cur.voice_script)
+          ? cur.voice_script
+          : slotOutroText(cur);
+        setManualText(outroText);
         setManualStep('outro');
         setManualNextId(next.id);
         await load();
@@ -314,10 +317,6 @@ export default function DemoSchedule() {
     const now = Date.now();
     setLiveStartedAt(now);
     startTimer(now);
-    const cur = currentSlot();
-    if (cur?.voice_agent && cur.voice_agent !== 'none' && cur.voice_script) {
-      speakVoice(cur.voice_script, cur.voice_agent);
-    }
   }
 
   async function startPending() {
@@ -343,9 +342,6 @@ export default function DemoSchedule() {
     const now = Date.now();
     setLiveStartedAt(now);
     startTimer(now);
-    if (pending?.voice_agent && pending.voice_agent !== 'none' && pending.voice_script) {
-      speakVoice(pending.voice_script, pending.voice_agent);
-    }
   }
 
   async function skipCurrent() {

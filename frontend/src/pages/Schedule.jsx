@@ -279,10 +279,6 @@ export default function Schedule() {
     // Only start the timer if this is still the current activation (not superseded)
     if (activationRef.current === myActivation) {
       startTimer();
-      // Per-speaker voice agent: read the script after timer starts (fires async, runs during talk)
-      if (sp?.voice_agent && sp.voice_agent !== 'none' && sp.voice_script) {
-        speakVoice(sp.voice_script, sp.voice_agent);
-      }
     }
   }
 
@@ -336,10 +332,6 @@ export default function Schedule() {
     setManualStep(null);
     setManualText('');
     startTimer();
-    const sp = speakers.find((s) => s.id === currentId);
-    if (sp?.voice_agent && sp.voice_agent !== 'none' && sp.voice_script) {
-      speakVoice(sp.voice_script, sp.voice_agent);
-    }
   }
 
   async function finishAndAdvance(status) {
@@ -352,10 +344,15 @@ export default function Schedule() {
     });
     setSpeakers((prev) => prev.map((s) => s.id === current.id ? { ...s, status } : s));
 
-    // Thank-you announcement only when speaker finishes (not when skipped/rescheduled)
+    // Outro announcement only when speaker finishes (not when skipped/rescheduled).
+    // If the speaker has a custom voice script, play that; otherwise say the default "thank you".
     const voiceMode = meta.hackathon.voice_mode || 'off';
     if (status === 'completed' && voiceMode !== 'off') {
-      await speakVoice(`Thank you ${current.name} for an amazing speech!`, voiceMode);
+      if (current.voice_agent && current.voice_agent !== 'none' && current.voice_script) {
+        await speakVoice(current.voice_script, current.voice_agent);
+      } else {
+        await speakVoice(`Thank you ${current.name} for an amazing speech!`, voiceMode);
+      }
     }
 
     const nextSp = speakers.find((s, i) => i > currentIdx && isEligible(s));
