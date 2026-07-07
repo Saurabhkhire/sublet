@@ -63,24 +63,29 @@ router.get('/:hid', hackathonContext, async (req, res) => {
 router.put('/:hid', hackathonContext, adminOnly, async (req, res) => {
   const name = (req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Hackathon name is required' });
+  // Merge: only overwrite fields that were explicitly included in the request body.
+  // This prevents one section of the admin panel from silently wiping fields it doesn't know about.
+  const cur = await get('SELECT * FROM hackathons WHERE id = ?', [req.hackathonId]);
+  const b = req.body;
+  const has = (k) => Object.prototype.hasOwnProperty.call(b, k);
   await run(
     'UPDATE hackathons SET name = ?, details = ?, support_info = ?, schedule = ?, event_date = ?, start_time = ?, end_time = ?, location = ?, voice_enabled = ?, submission_deadline = ?, submission_rules = ?, judging_rules = ?, voice_mode = ?, auto_stop_speaker = ?, auto_advance_demo = ? WHERE id = ?',
     [
       name,
-      req.body?.details || '',
-      req.body?.support_info || '',
-      req.body?.schedule || '',
-      req.body?.event_date || '',
-      req.body?.start_time || '',
-      req.body?.end_time || '',
-      req.body?.location || '',
-      req.body?.voice_mode && req.body.voice_mode !== 'off' ? 1 : 0,
-      req.body?.submission_deadline || '',
-      req.body?.submission_rules || '',
-      req.body?.judging_rules || '',
-      req.body?.voice_mode || 'off',
-      req.body?.auto_stop_speaker === false ? 0 : 1,
-      req.body?.auto_advance_demo === false ? 0 : 1,
+      has('details')            ? (b.details            || '') : (cur.details            || ''),
+      has('support_info')       ? (b.support_info        || '') : (cur.support_info        || ''),
+      has('schedule')           ? (b.schedule            || '') : (cur.schedule            || ''),
+      has('event_date')         ? (b.event_date          || '') : (cur.event_date          || ''),
+      has('start_time')         ? (b.start_time          || '') : (cur.start_time          || ''),
+      has('end_time')           ? (b.end_time            || '') : (cur.end_time            || ''),
+      has('location')           ? (b.location            || '') : (cur.location            || ''),
+      has('voice_mode')         ? (b.voice_mode && b.voice_mode !== 'off' ? 1 : 0) : (cur.voice_enabled ?? 0),
+      has('submission_deadline')? (b.submission_deadline || '') : (cur.submission_deadline || ''),
+      has('submission_rules')   ? (b.submission_rules    || '') : (cur.submission_rules    || ''),
+      has('judging_rules')      ? (b.judging_rules       || '') : (cur.judging_rules       || ''),
+      has('voice_mode')         ? (b.voice_mode          || 'off') : (cur.voice_mode       || 'off'),
+      has('auto_stop_speaker')  ? (b.auto_stop_speaker === false ? 0 : 1) : (cur.auto_stop_speaker ?? 1),
+      has('auto_advance_demo')  ? (b.auto_advance_demo  === false ? 0 : 1) : (cur.auto_advance_demo  ?? 1),
       req.hackathonId,
     ]
   );
