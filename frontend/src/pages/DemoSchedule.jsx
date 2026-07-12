@@ -61,6 +61,17 @@ async function speakVoice(text, voiceMode) {
   } catch (_) {}
 }
 
+// Fire a voice agent script in the background — does NOT cancel ongoing speech,
+// does NOT block the caller. Used to start a slot's voice_script at timer start.
+function speakAgentBackground(text, voiceMode) {
+  if (!window.speechSynthesis || !voiceMode || voiceMode === 'off' || !text) return;
+  getReadyVoices().then((voices) => {
+    const u = new SpeechSynthesisUtterance(text);
+    applyVoiceMode(u, voiceMode, voices);
+    window.speechSynthesis.speak(u);
+  }).catch(() => {});
+}
+
 function fmtSecs(secs) {
   const a = Math.abs(Math.round(secs));
   return `${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`;
@@ -215,6 +226,10 @@ export default function DemoSchedule() {
     const now = Date.now();
     setLiveStartedAt(now);
     startTimer(now);
+    // Start voice agent script in background at the moment the timer begins.
+    if (first.voice_agent && first.voice_agent !== 'none' && first.voice_script) {
+      speakAgentBackground(first.voice_script, first.voice_agent);
+    }
   }
 
   async function askQuestion() {
@@ -243,14 +258,9 @@ export default function DemoSchedule() {
     if (autoStart || !next) {
       if (cur) await put(`${base}/${cur.id}`, { status: 'completed', actual_end: new Date().toISOString() });
 
-      // Outro announcement only when demo finishes normally (not skipped).
-      // If the slot has a custom voice script, play that; otherwise the default "thank you".
+      // MC always says "thank you" at the end — voice_script now plays at timer START.
       if (cur && !wasSkipped && voiceMode !== 'off') {
-        if (cur.voice_agent && cur.voice_agent !== 'none' && cur.voice_script) {
-          await speakVoice(cur.voice_script, cur.voice_agent);
-        } else {
-          await speakVoice(slotOutroText(cur), voiceMode);
-        }
+        await speakVoice(slotOutroText(cur), voiceMode);
       }
 
       if (next) {
@@ -271,6 +281,10 @@ export default function DemoSchedule() {
         const now = Date.now();
         setLiveStartedAt(now);
         startTimer(now);
+        // Start next slot's voice agent script in background.
+        if (next.voice_agent && next.voice_agent !== 'none' && next.voice_script) {
+          speakAgentBackground(next.voice_script, next.voice_agent);
+        }
       } else {
         stopTimer(); setIsLive(false); setCurrentId(null); setPendingId(null);
         await load();
@@ -280,10 +294,8 @@ export default function DemoSchedule() {
       stopTimer();
       if (cur && !wasSkipped && voiceMode !== 'off') {
         // In manual mode: show "Speak Outro" button first, then proceed to pending.
-        // Use custom voice script as outro if configured; otherwise default "thank you".
-        const outroText = (cur.voice_agent && cur.voice_agent !== 'none' && cur.voice_script)
-          ? cur.voice_script
-          : slotOutroText(cur);
+        // voice_script now plays at timer START, so outro is always the MC thank-you.
+        const outroText = slotOutroText(cur);
         setManualText(outroText);
         setManualStep('outro');
         setManualNextId(next.id);
@@ -317,6 +329,12 @@ export default function DemoSchedule() {
     const now = Date.now();
     setLiveStartedAt(now);
     startTimer(now);
+    // Start voice agent script in background when admin clicks "Start Timer".
+    // Pausing the timer does not interrupt this speech.
+    const cur = currentSlot();
+    if (cur && cur.voice_agent && cur.voice_agent !== 'none' && cur.voice_script) {
+      speakAgentBackground(cur.voice_script, cur.voice_agent);
+    }
   }
 
   async function startPending() {
@@ -342,6 +360,10 @@ export default function DemoSchedule() {
     const now = Date.now();
     setLiveStartedAt(now);
     startTimer(now);
+    // Start voice agent script in background at timer start.
+    if (pending && pending.voice_agent && pending.voice_agent !== 'none' && pending.voice_script) {
+      speakAgentBackground(pending.voice_script, pending.voice_agent);
+    }
   }
 
   async function skipCurrent() {
@@ -405,10 +427,39 @@ export default function DemoSchedule() {
       return a.localeCompare(b);
     });
     const myGroupKey = groupKeys.find((g) => groupMap[g].some((s) => (s.team || []).includes(myEmail)));
+    const mySlot = myEmail ? slots.find((s) => (s.team || []).includes(myEmail)) : null;
 
     return (
       <div className="stack">
         <h1 style={{ marginBottom: 4 }}>🎬 Final Demos</h1>
+
+        {/* Your project — prominent callout at top for logged-in participants */}
+        {mySlot && (
+          <div style={{
+            padding: '18px 20px', borderRadius: 12,
+            background: 'linear-gradient(135deg, var(--accent), #7c3aed)',
+            color: '#fff', boxShadow: '0 4px 20px rgba(99,102,241,.35)',
+          }}>
+            <div style={{ fontSize: 11, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '.09em', marginBottom: 6 }}>
+              ⭐ Your Project
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.2, marginBottom: 6 }}>
+              {mySlot.project_name || mySlot.custom_name || 'Your Demo'}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', fontSize: 14, opacity: 0.92 }}>
+              {mySlot.project_judge_group && (
+                <span>🏷 Group {mySlot.project_judge_group}</span>
+              )}
+              <span>🕐 {slotTimeMap[mySlot.id] || 'TBD'}</span>
+              <span>⏱ {mySlot.duration_minutes} min</span>
+            </div>
+            {mySlot.project_award && (
+              <div style={{ marginTop: 8, display: 'inline-block', background: 'rgba(255,255,255,.22)', borderRadius: 6, padding: '2px 10px', fontSize: 12 }}>
+                {mySlot.project_award}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Now Presenting banner */}
         {liveSlot && (

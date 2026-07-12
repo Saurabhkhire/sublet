@@ -1,12 +1,11 @@
 import express from 'express';
 import { get, all, run, insert } from '../db.js';
-import { authRequired, hackathonContext, adminOnly } from '../middleware/auth.js';
+import { authRequired, hackathonContext, adminOnly, optionalAuth, optionalHackathonContext } from '../middleware/auth.js';
 
 const router = express.Router({ mergeParams: true });
-router.use(authRequired, hackathonContext);
 
-// List all speakers for this hackathon ordered by order_index.
-router.get('/', async (req, res) => {
+// List all speakers for this hackathon ordered by order_index — public (no login needed).
+router.get('/', optionalAuth, optionalHackathonContext, async (req, res) => {
   const rows = await all(
     'SELECT * FROM speakers WHERE hackathon_id = ? ORDER BY order_index ASC, id ASC',
     [req.hackathonId]
@@ -15,7 +14,7 @@ router.get('/', async (req, res) => {
 });
 
 // Create a speaker (admin only).
-router.post('/', adminOnly, async (req, res) => {
+router.post('/', authRequired, hackathonContext, adminOnly, async (req, res) => {
   const { name, title, duration_minutes, scheduled_start, notes, break_after_minutes, voice_agent, voice_script } = req.body || {};
   if (!name || !String(name).trim()) {
     return res.status(400).json({ error: 'Speaker name is required' });
@@ -45,7 +44,7 @@ router.post('/', adminOnly, async (req, res) => {
 });
 
 // Bulk reorder — must be defined BEFORE /:id to avoid :id matching "reorder".
-router.put('/reorder', adminOnly, async (req, res) => {
+router.put('/reorder', authRequired, hackathonContext, adminOnly, async (req, res) => {
   const items = req.body;
   if (!Array.isArray(items)) return res.status(400).json({ error: 'Expected array [{id, order_index}]' });
   for (const { id, order_index } of items) {
@@ -60,7 +59,7 @@ router.put('/reorder', adminOnly, async (req, res) => {
 });
 
 // Update a single speaker (admin only) — any subset of fields.
-router.put('/:id', adminOnly, async (req, res) => {
+router.put('/:id', authRequired, hackathonContext, adminOnly, async (req, res) => {
   const sp = await get('SELECT * FROM speakers WHERE id = ? AND hackathon_id = ?', [req.params.id, req.hackathonId]);
   if (!sp) return res.status(404).json({ error: 'Speaker not found' });
   const { name, title, duration_minutes, status, scheduled_start, actual_start, actual_end, order_index, notes, break_after_minutes, voice_agent, voice_script } = req.body || {};
@@ -90,7 +89,7 @@ router.put('/:id', adminOnly, async (req, res) => {
 });
 
 // Delete a speaker (admin only).
-router.delete('/:id', adminOnly, async (req, res) => {
+router.delete('/:id', authRequired, hackathonContext, adminOnly, async (req, res) => {
   const sp = await get('SELECT * FROM speakers WHERE id = ? AND hackathon_id = ?', [req.params.id, req.hackathonId]);
   if (!sp) return res.status(404).json({ error: 'Speaker not found' });
   await run('DELETE FROM speakers WHERE id = ?', [sp.id]);

@@ -64,3 +64,41 @@ export function judgeRequired(req, res, next) {
   }
   next();
 }
+
+// Like authRequired but never rejects — sets req.user = null if no/invalid token.
+export async function optionalAuth(req, res, next) {
+  try {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (!token) { req.user = null; return next(); }
+    const payload = jwt.verify(token, SECRET());
+    const user = await get('SELECT id, email, linkedin, role FROM users WHERE id = ?', [payload.id]);
+    req.user = user || null;
+    next();
+  } catch {
+    req.user = null;
+    next();
+  }
+}
+
+// Like hackathonContext but works when req.user is null (unauthenticated public views).
+export async function optionalHackathonContext(req, res, next) {
+  const hid = Number(req.params.hid);
+  if (!hid) return res.status(400).json({ error: 'Invalid hackathon id' });
+  const hackathon = await get('SELECT * FROM hackathons WHERE id = ?', [hid]);
+  if (!hackathon) return res.status(404).json({ error: 'Hackathon not found' });
+  req.hackathon = hackathon;
+  req.hackathonId = hid;
+  if (!req.user) {
+    req.isJudge = false;
+  } else if (req.user.role === 'admin') {
+    req.isJudge = true;
+  } else {
+    const judge = await get(
+      'SELECT 1 FROM hackathon_judges WHERE hackathon_id = ? AND user_id = ?',
+      [hid, req.user.id]
+    );
+    req.isJudge = !!judge;
+  }
+  next();
+}

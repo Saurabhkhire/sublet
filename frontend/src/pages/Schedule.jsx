@@ -65,6 +65,17 @@ async function speakVoice(text, voiceMode) {
   } catch (_) {}
 }
 
+// Fire a voice agent script in the background — does NOT cancel ongoing speech,
+// does NOT block the caller. Used to start a speaker's voice_script at timer start.
+function speakAgentBackground(text, voiceMode) {
+  if (!window.speechSynthesis || !voiceMode || voiceMode === 'off' || !text) return;
+  getReadyVoices().then((voices) => {
+    const u = new SpeechSynthesisUtterance(text);
+    applyVoiceMode(u, voiceMode, voices);
+    window.speechSynthesis.speak(u);
+  }).catch(() => {});
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function fmtSecs(secs) {
@@ -279,6 +290,11 @@ export default function Schedule() {
     // Only start the timer if this is still the current activation (not superseded)
     if (activationRef.current === myActivation) {
       startTimer();
+      // Start voice agent script in the background at the moment the timer begins.
+      // Pause only stops the countdown — it never cancels this speech.
+      if (sp && sp.voice_agent && sp.voice_agent !== 'none' && sp.voice_script) {
+        speakAgentBackground(sp.voice_script, sp.voice_agent);
+      }
     }
   }
 
@@ -332,6 +348,12 @@ export default function Schedule() {
     setManualStep(null);
     setManualText('');
     startTimer();
+    // Start voice agent script in background when admin clicks "Start Timer".
+    // Pausing the timer does not interrupt this speech.
+    const voiceMode = meta.hackathon.voice_mode || 'off';
+    if (current && current.voice_agent && current.voice_agent !== 'none' && current.voice_script) {
+      speakAgentBackground(current.voice_script, current.voice_agent);
+    }
   }
 
   async function finishAndAdvance(status) {
@@ -344,15 +366,11 @@ export default function Schedule() {
     });
     setSpeakers((prev) => prev.map((s) => s.id === current.id ? { ...s, status } : s));
 
-    // Outro announcement only when speaker finishes (not when skipped/rescheduled).
-    // If the speaker has a custom voice script, play that; otherwise say the default "thank you".
+    // MC always says "thank you" when a speaker finishes (not when skipped/rescheduled).
+    // The voice_script now plays at timer START, so the outro is always the MC thank-you.
     const voiceMode = meta.hackathon.voice_mode || 'off';
     if (status === 'completed' && voiceMode !== 'off') {
-      if (current.voice_agent && current.voice_agent !== 'none' && current.voice_script) {
-        await speakVoice(current.voice_script, current.voice_agent);
-      } else {
-        await speakVoice(`Thank you ${current.name} for an amazing speech!`, voiceMode);
-      }
+      await speakVoice(`Thank you ${current.name} for an amazing speech!`, voiceMode);
     }
 
     const nextSp = speakers.find((s, i) => i > currentIdx && isEligible(s));

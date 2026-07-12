@@ -1,9 +1,8 @@
 import express from 'express';
 import { get, all, run, insert } from '../db.js';
-import { authRequired, hackathonContext, adminOnly } from '../middleware/auth.js';
+import { authRequired, hackathonContext, adminOnly, optionalAuth, optionalHackathonContext } from '../middleware/auth.js';
 
 const router = express.Router({ mergeParams: true });
-router.use(authRequired, hackathonContext);
 
 async function slotWithProject(slot) {
   if (!slot) return null;
@@ -16,8 +15,8 @@ async function slotWithProject(slot) {
   return { ...slot, project_name: project?.name || '', project_award: project?.award_tag || '', project_judge_group: project?.judge_group || '', project_description: project?.short_description || '', team: team.map((t) => t.email) };
 }
 
-// List all demo slots with joined project info
-router.get('/', async (req, res) => {
+// List all demo slots with joined project info — public (no login needed).
+router.get('/', optionalAuth, optionalHackathonContext, async (req, res) => {
   const rows = await all(
     'SELECT * FROM demo_slots WHERE hackathon_id = ? ORDER BY order_index, id',
     [req.hackathonId]
@@ -28,7 +27,7 @@ router.get('/', async (req, res) => {
 });
 
 // Create a demo slot (admin)
-router.post('/', adminOnly, async (req, res) => {
+router.post('/', authRequired, hackathonContext, adminOnly, async (req, res) => {
   const { project_id, custom_name, duration_minutes, scheduled_start, notes, break_after_minutes, voice_agent, voice_script } = req.body || {};
   if (!project_id && !String(custom_name || '').trim()) {
     return res.status(400).json({ error: 'Either project_id or custom_name is required' });
@@ -58,7 +57,7 @@ router.post('/', adminOnly, async (req, res) => {
 });
 
 // Reorder — must be BEFORE /:id
-router.put('/reorder', adminOnly, async (req, res) => {
+router.put('/reorder', authRequired, hackathonContext, adminOnly, async (req, res) => {
   const items = req.body;
   if (!Array.isArray(items)) return res.status(400).json({ error: 'Array expected' });
   for (const { id, order_index } of items) {
@@ -69,7 +68,7 @@ router.put('/reorder', adminOnly, async (req, res) => {
 });
 
 // Update a slot
-router.put('/:id', adminOnly, async (req, res) => {
+router.put('/:id', authRequired, hackathonContext, adminOnly, async (req, res) => {
   const slot = await get('SELECT * FROM demo_slots WHERE id = ? AND hackathon_id = ?', [req.params.id, req.hackathonId]);
   if (!slot) return res.status(404).json({ error: 'Slot not found' });
   const { project_id, custom_name, duration_minutes, status, scheduled_start, actual_start, actual_end, order_index, notes, break_after_minutes, voice_agent, voice_script } = req.body || {};
@@ -99,7 +98,7 @@ router.put('/:id', adminOnly, async (req, res) => {
 });
 
 // Delete a slot
-router.delete('/:id', adminOnly, async (req, res) => {
+router.delete('/:id', authRequired, hackathonContext, adminOnly, async (req, res) => {
   const slot = await get('SELECT id FROM demo_slots WHERE id = ? AND hackathon_id = ?', [req.params.id, req.hackathonId]);
   if (!slot) return res.status(404).json({ error: 'Slot not found' });
   await run('DELETE FROM demo_slots WHERE id = ?', [slot.id]);

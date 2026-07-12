@@ -1,9 +1,29 @@
 import express from 'express';
 import { get, all, run, insert } from '../db.js';
-import { authRequired, adminOnly, hackathonContext } from '../middleware/auth.js';
+import { authRequired, adminOnly, hackathonContext, optionalAuth, optionalHackathonContext } from '../middleware/auth.js';
 import { ROLE_OPTIONS, SCORE_CRITERIA } from '../constants.js';
 
 const router = express.Router();
+
+// Public GET for a single hackathon — registered before router.use(authRequired) so it
+// doesn't require a login. Unauthenticated visitors get is_admin/is_judge = false.
+router.get('/:hid', optionalAuth, optionalHackathonContext, async (req, res) => {
+  res.json({
+    hackathon: req.hackathon,
+    tracks: await all('SELECT * FROM tracks WHERE hackathon_id = ? ORDER BY id', [req.hackathonId]),
+    sponsors: await all('SELECT * FROM sponsors WHERE hackathon_id = ? ORDER BY id', [req.hackathonId]),
+    judges: await all(
+      `SELECT u.id, u.email, u.linkedin FROM hackathon_judges hj
+       JOIN users u ON u.id = hj.user_id WHERE hj.hackathon_id = ? ORDER BY u.email`,
+      [req.hackathonId]
+    ),
+    roles: ROLE_OPTIONS.map((r) => r.value),
+    score_criteria: SCORE_CRITERIA,
+    is_judge: req.isJudge,
+    is_admin: req.user?.role === 'admin',
+  });
+});
+
 router.use(authRequired);
 
 /* --------------------------- Hackathons --------------------------- */

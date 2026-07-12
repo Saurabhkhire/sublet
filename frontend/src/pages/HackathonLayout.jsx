@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Outlet, useParams, NavLink, useLocation } from 'react-router-dom';
 import { get } from '../api.js';
+import { useAuth } from '../auth.jsx';
 
-// Loads hackathon-scoped meta once and shares it (plus a reload fn) with all sub-pages
-// via the router Outlet context. Renders the section sidebar.
 export default function HackathonLayout() {
   const { hid } = useParams();
   const location = useLocation();
+  const { user } = useAuth();
   const [meta, setMeta] = useState(null);
   const [error, setError] = useState('');
 
@@ -23,10 +23,11 @@ export default function HackathonLayout() {
   if (error) return <div className="page"><div className="card"><p className="error">{error}</p></div></div>;
   if (!meta) return <div className="page muted">Loading hackathon…</div>;
 
+  const loggedIn = !!user;
   const sections = [
-    { to: `/h/${hid}`, label: 'Overview', icon: '◆', end: true },
-    { to: `/h/${hid}/matching`, label: 'Team Matching', icon: '⚇' },
-    { to: `/h/${hid}/submit`, label: 'Submit Project', icon: '➜' },
+    ...(loggedIn ? [{ to: `/h/${hid}`, label: 'Overview', icon: '◆', end: true }] : []),
+    ...(loggedIn ? [{ to: `/h/${hid}/matching`, label: 'Team Matching', icon: '⚇' }] : []),
+    ...(loggedIn ? [{ to: `/h/${hid}/submit`, label: 'Submit Project', icon: '➜' }] : []),
     { to: `/h/${hid}/schedule`, label: 'Speaking Schedule', icon: '🎤' },
     ...(meta.is_judge ? [{ to: `/h/${hid}/judging`, label: 'Judging', icon: '★' }] : []),
     { to: `/h/${hid}/judging-groups`, label: 'Project Demo Groups', icon: '⚖' },

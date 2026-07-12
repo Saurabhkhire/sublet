@@ -17,10 +17,10 @@ import JudgingGroups from './pages/JudgingGroups.jsx';
 import DemoSchedule from './pages/DemoSchedule.jsx';
 import Winners from './pages/Winners.jsx';
 
-function Protected({ children, need }) {
+function Protected({ children, need, optional }) {
   const { user, loading, isAdmin } = useAuth();
   if (loading) return <div className="page">Loading…</div>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user && !optional) return <Navigate to="/login" replace />;
   if (need === 'admin' && !isAdmin) return <div className="page">Admins only.</div>;
   return children;
 }
@@ -36,11 +36,11 @@ export default function App() {
         <Route path="/" element={<Protected><Hackathons /></Protected>} />
         <Route path="/profile" element={<Protected><Profile /></Protected>} />
         <Route path="/users" element={<Protected need="admin"><Users /></Protected>} />
-        <Route path="/h/:hid" element={<Protected><HackathonLayout /></Protected>}>
-          <Route index element={<Overview />} />
-          <Route path="matching" element={<TeamMatching />} />
-          <Route path="submit" element={<Submission />} />
-          <Route path="judging" element={<Judging />} />
+        <Route path="/h/:hid" element={<Protected optional><HackathonLayout /></Protected>}>
+          <Route index element={<Protected><Overview /></Protected>} />
+          <Route path="matching" element={<Protected><TeamMatching /></Protected>} />
+          <Route path="submit" element={<Protected><Submission /></Protected>} />
+          <Route path="judging" element={<Protected><Judging /></Protected>} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="judging-groups" element={<JudgingGroups />} />
           <Route path="demo" element={<DemoSchedule />} />
