@@ -26,6 +26,10 @@ export default function Hackathons() {
     } catch (err) { setError(err.message); }
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+  const active = list.filter((h) => !h.event_date || h.event_date >= today);
+  const past   = list.filter((h) => h.event_date && h.event_date < today);
+
   return (
     <div className="page">
       <div className="hero">
@@ -35,7 +39,7 @@ export default function Hackathons() {
       </div>
 
       <div className="spread" style={{ marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>{list.length} hackathon{list.length === 1 ? '' : 's'}</h2>
+        <h2 style={{ margin: 0 }}>{active.length} active hackathon{active.length === 1 ? '' : 's'}</h2>
         {isAdmin && !creating && <button onClick={() => setCreating(true)}>+ New hackathon</button>}
       </div>
 
@@ -78,28 +82,51 @@ export default function Hackathons() {
         </form>
       )}
 
-      {list.length === 0 && !creating ? (
+      {active.length === 0 && !creating ? (
         <div className="card empty">
           <div className="big">🗓️</div>
-          <p>No hackathons yet.{isAdmin ? ' Create your first one.' : ' Check back soon.'}</p>
+          <p>No active hackathons.{isAdmin ? ' Create your first one.' : ' Check back soon.'}</p>
         </div>
       ) : (
         <div className="grid">
-          {list.map((h) => (
-            <div key={h.id} className="card card-hover" onClick={() => navigate(`/h/${h.id}`)}>
-              <div className="spread">
-                <h3 style={{ margin: 0 }}>{h.name}</h3>
-                {h.is_judge && <span className="badge accent">Judge</span>}
-              </div>
-              <p className="muted small" style={{ minHeight: 36 }}>{h.details || 'No description provided.'}</p>
-              <div className="row small faint" style={{ gap: 16 }}>
-                <span>{h.project_count} project{h.project_count === 1 ? '' : 's'}</span>
-                <span>{h.judge_count} judge{h.judge_count === 1 ? '' : 's'}</span>
-              </div>
-            </div>
-          ))}
+          {active.map((h) => <HackathonCard key={h.id} h={h} onClick={() => navigate(`/h/${h.id}`)} />)}
         </div>
       )}
+
+      {past.length > 0 && (
+        <>
+          <h2 style={{ marginTop: 40, marginBottom: 16, color: 'var(--muted, #6b7280)' }}>Past hackathons</h2>
+          <div className="grid" style={{ opacity: 0.72 }}>
+            {past.map((h) => <HackathonCard key={h.id} h={h} onClick={() => navigate(`/h/${h.id}`)} past />)}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function HackathonCard({ h, onClick, past }) {
+  const fmtDate = (d) => {
+    if (!d) return null;
+    try { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+    catch { return d; }
+  };
+
+  return (
+    <div className="card card-hover" onClick={onClick} style={{ position: 'relative' }}>
+      {past && (
+        <span className="badge" style={{ position: 'absolute', top: 12, right: 12, background: 'var(--muted, #6b7280)', color: '#fff', fontSize: 11 }}>Past</span>
+      )}
+      <div className="spread">
+        <h3 style={{ margin: 0, paddingRight: past ? 52 : 0 }}>{h.name}</h3>
+        {h.is_judge && <span className="badge accent">Judge</span>}
+      </div>
+      <p className="muted small" style={{ minHeight: 36 }}>{h.details || 'No description provided.'}</p>
+      <div className="row small faint" style={{ gap: 16 }}>
+        <span>{h.project_count} project{h.project_count === 1 ? '' : 's'}</span>
+        <span>{h.judge_count} judge{h.judge_count === 1 ? '' : 's'}</span>
+        {h.event_date && <span>📅 {fmtDate(h.event_date)}</span>}
+      </div>
     </div>
   );
 }

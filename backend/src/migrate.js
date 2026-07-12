@@ -409,3 +409,19 @@ export async function migrateVoiceAndRules() {
     )`);
   }
 }
+
+// Adds app_url and agent_evals_link to projects.
+export async function migrateProjectLinks() {
+  if (isPg) {
+    await run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS app_url TEXT NOT NULL DEFAULT ''");
+    await run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS agent_evals_link TEXT NOT NULL DEFAULT ''");
+    return;
+  }
+  const add = async (col) => {
+    if (!(await tableExists('projects'))) return;
+    const cols = await columnNames('projects');
+    if (!cols.includes(col)) await run(`ALTER TABLE projects ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
+  };
+  await add('app_url');
+  await add('agent_evals_link');
+}

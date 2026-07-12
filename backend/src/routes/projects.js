@@ -57,7 +57,7 @@ function todayUTCDate() {
 
 // Create a submission. Each participant may be on only ONE project per hackathon.
 router.post('/', async (req, res) => {
-  const { name, short_description, demo_video_link, git_link, participants = [], tracks = [], sponsors = [] } =
+  const { name, short_description, demo_video_link, git_link, app_url, agent_evals_link, participants = [], tracks = [], sponsors = [] } =
     req.body || {};
   if (!name || !String(name).trim()) {
     return res.status(400).json({ error: 'Project name is required' });
@@ -135,6 +135,8 @@ router.post('/', async (req, res) => {
     short_description: short_description || '',
     demo_video_link: demo_video_link || '',
     git_link: git_link || '',
+    app_url: app_url || '',
+    agent_evals_link: agent_evals_link || '',
     created_by: req.user.id,
     created_at: new Date().toISOString(),
     judge_group: autoJudgeGroup,
@@ -242,13 +244,13 @@ router.put('/:projectId', async (req, res) => {
     return res.status(403).json({ error: 'You do not have permission to edit this project' });
   }
 
-  const { name, short_description, demo_video_link, git_link, participants, tracks, sponsors } = req.body || {};
+  const { name, short_description, demo_video_link, git_link, app_url, agent_evals_link, participants, tracks, sponsors } = req.body || {};
 
   if (name !== undefined) {
     if (!String(name).trim()) return res.status(400).json({ error: 'Project name is required' });
     await run(
-      'UPDATE projects SET name = ?, short_description = ?, demo_video_link = ?, git_link = ? WHERE id = ?',
-      [String(name).trim(), short_description || '', demo_video_link || '', git_link || '', project.id]
+      'UPDATE projects SET name = ?, short_description = ?, demo_video_link = ?, git_link = ?, app_url = ?, agent_evals_link = ? WHERE id = ?',
+      [String(name).trim(), short_description || '', demo_video_link || '', git_link || '', app_url || '', agent_evals_link || '', project.id]
     );
   }
 

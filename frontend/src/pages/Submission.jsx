@@ -12,6 +12,7 @@ export default function Submission() {
   const [participants, setParticipants] = useState([]);
   const [form, setForm] = useState({
     name: '', short_description: '', demo_video_link: '', git_link: '',
+    app_url: '', agent_evals_link: '',
     tracks: [], sponsors: [],
   });
   const [error, setError] = useState('');
@@ -47,7 +48,7 @@ export default function Submission() {
         participants: participants.map((p) => p.id),
       });
       setMsg('Project submitted!');
-      setForm({ name: '', short_description: '', demo_video_link: '', git_link: '', tracks: [], sponsors: [] });
+      setForm({ name: '', short_description: '', demo_video_link: '', git_link: '', app_url: '', agent_evals_link: '', tracks: [], sponsors: [] });
       setParticipants([]);
       reload();
     } catch (err) { setError(err.message); }
@@ -89,6 +90,14 @@ export default function Submission() {
             </label>
             <label style={{ flex: 1, minWidth: 220 }}>Git repository link
               <input value={form.git_link} onChange={(e) => set('git_link', e.target.value)} placeholder="https://github.com/…" />
+            </label>
+          </div>
+          <div className="row" style={{ gap: 16 }}>
+            <label style={{ flex: 1, minWidth: 220 }}>Live app URL
+              <input value={form.app_url} onChange={(e) => set('app_url', e.target.value)} placeholder="https://yourapp.com" />
+            </label>
+            <label style={{ flex: 1, minWidth: 220 }}>Agent OS Evals link
+              <input value={form.agent_evals_link} onChange={(e) => set('agent_evals_link', e.target.value)} placeholder="https://…" />
             </label>
           </div>
 
@@ -160,6 +169,8 @@ function ProjectCard({ project, hid, currentUserId, meta, isEditing, onStartEdit
       short_description: project.short_description || '',
       demo_video_link: project.demo_video_link || '',
       git_link: project.git_link || '',
+      app_url: project.app_url || '',
+      agent_evals_link: project.agent_evals_link || '',
     });
     setEditParticipants(project.participants.map((p) => ({ id: p.id, email: p.email })));
     setEditTracks(project.tracks.map((t) => t.id));
@@ -216,12 +227,20 @@ function ProjectCard({ project, hid, currentUserId, meta, isEditing, onStartEdit
               {project.tracks.map((t) => <span key={t.id} className="badge accent">{t.name}</span>)}
               {project.sponsors.map((s) => <span key={s.id} className="badge">{s.name}</span>)}
             </div>
-            {project.demo_video_link && (
-              <a href={project.demo_video_link} target="_blank" rel="noreferrer" className="small" style={{ marginRight: 12 }}>▶ Demo video</a>
-            )}
-            {project.git_link && (
-              <a href={project.git_link} target="_blank" rel="noreferrer" className="small">⌥ Git repo</a>
-            )}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginTop: 4 }}>
+              {project.demo_video_link && (
+                <a href={project.demo_video_link} target="_blank" rel="noreferrer" className="small">▶ Demo video</a>
+              )}
+              {project.git_link && (
+                <a href={project.git_link} target="_blank" rel="noreferrer" className="small">⌥ Git repo</a>
+              )}
+              {project.app_url && (
+                <a href={project.app_url} target="_blank" rel="noreferrer" className="small">🌐 Live app</a>
+              )}
+              {project.agent_evals_link && (
+                <a href={project.agent_evals_link} target="_blank" rel="noreferrer" className="small">🤖 Agent OS Evals</a>
+              )}
+            </div>
             <p className="faint small" style={{ marginTop: 8, marginBottom: 0 }}>
               Team: {project.participants.map((x) => x.email).join(', ')}
             </p>
@@ -248,6 +267,14 @@ function ProjectCard({ project, hid, currentUserId, meta, isEditing, onStartEdit
           </label>
           <label style={{ flex: 1, minWidth: 180 }}>Git repository link
             <input value={editForm.git_link} onChange={(e) => eSet('git_link', e.target.value)} placeholder="https://github.com/…" />
+          </label>
+        </div>
+        <div className="row" style={{ gap: 16 }}>
+          <label style={{ flex: 1, minWidth: 180 }}>Live app URL
+            <input value={editForm.app_url} onChange={(e) => eSet('app_url', e.target.value)} placeholder="https://yourapp.com" />
+          </label>
+          <label style={{ flex: 1, minWidth: 180 }}>Agent OS Evals link
+            <input value={editForm.agent_evals_link} onChange={(e) => eSet('agent_evals_link', e.target.value)} placeholder="https://…" />
           </label>
         </div>
 
