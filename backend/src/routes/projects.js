@@ -77,21 +77,6 @@ router.post('/', async (req, res) => {
         error: `Projects can only be submitted on the day of the hackathon (${eventDate}).`,
       });
     }
-    // Time-based deadline: if a submission_deadline is set, enforce it (+ 30 min grace) on event day.
-    const submissionDeadline = (req.hackathon.submission_deadline || '').trim();
-    if (submissionDeadline && today === eventDate) {
-      const [dh, dm] = submissionDeadline.split(':').map(Number);
-      if (!isNaN(dh) && !isNaN(dm)) {
-        const graceMins = dh * 60 + dm + 30;
-        const now = new Date();
-        const nowMins = now.getUTCHours() * 60 + now.getUTCMinutes();
-        if (nowMins > graceMins) {
-          return res.status(403).json({
-            error: `Submissions are closed. The deadline was ${dh}:${String(dm).padStart(2, '0')} UTC with a 30-minute grace period.`,
-          });
-        }
-      }
-    }
   }
   const participantIds = Array.from(new Set([req.user.id, ...participants.map(Number)]));
 
