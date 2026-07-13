@@ -154,6 +154,22 @@ export default function Overview() {
         </section>
       )}
 
+      {/* Submission Rules */}
+      {(h.submission_rules || '').trim() && (
+        <section className="card">
+          <h2 style={{ marginTop: 0 }}>📋 Submission Rules</h2>
+          <p style={pre}>{linkify(h.submission_rules)}</p>
+        </section>
+      )}
+
+      {/* Judging Rules */}
+      {(h.judging_rules || '').trim() && (
+        <section className="card">
+          <h2 style={{ marginTop: 0 }}>⚖️ Judging Rules</h2>
+          <p style={pre}>{linkify(h.judging_rules)}</p>
+        </section>
+      )}
+
       {/* Judges */}
       <section className="card">
         <h2 style={{ marginTop: 0 }}>Judges</h2>
