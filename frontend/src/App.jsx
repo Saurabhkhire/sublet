@@ -37,7 +37,7 @@ export default function App() {
         <Route path="/profile" element={<Protected><Profile /></Protected>} />
         <Route path="/users" element={<Protected need="admin"><Users /></Protected>} />
         <Route path="/h/:hid" element={<Protected optional><HackathonLayout /></Protected>}>
-          <Route index element={<Protected><Overview /></Protected>} />
+          <Route index element={<Overview />} />
           <Route path="matching" element={<Protected><TeamMatching /></Protected>} />
           <Route path="submit" element={<Protected><Submission /></Protected>} />
           <Route path="judging" element={<Protected><Judging /></Protected>} />

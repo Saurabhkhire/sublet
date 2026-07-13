@@ -25,7 +25,7 @@ export default function HackathonLayout() {
 
   const loggedIn = !!user;
   const sections = [
-    ...(loggedIn ? [{ to: `/h/${hid}`, label: 'Overview', icon: '◆', end: true }] : []),
+    { to: `/h/${hid}`, label: 'Overview', icon: '◆', end: true },
     ...(loggedIn ? [{ to: `/h/${hid}/matching`, label: 'Team Matching', icon: '⚇' }] : []),
     ...(loggedIn ? [{ to: `/h/${hid}/submit`, label: 'Submit Project', icon: '➜' }] : []),
     { to: `/h/${hid}/schedule`, label: 'Speaking Schedule', icon: '🎤' },
