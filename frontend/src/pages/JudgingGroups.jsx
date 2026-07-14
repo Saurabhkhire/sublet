@@ -57,13 +57,8 @@ export default function JudgingGroups() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  const BUFFER_KEY = `demo_buffer_${hid}`;
-  const [previewBuffer, setPreviewBuffer] = useState(() => Number(localStorage.getItem(`demo_buffer_${hid}`) || 0));
-  function updateBuffer(v) {
-    const n = Math.max(0, Number(v));
-    setPreviewBuffer(n);
-    localStorage.setItem(`demo_buffer_${hid}`, String(n));
-  }
+  const [previewBuffer, setPreviewBuffer] = useState(0);
+  function updateBuffer(v) { setPreviewBuffer(Math.max(0, Number(v))); }
 
   async function load() {
     try { const d = await get(`/api/hackathons/${hid}/judging-groups`); setData(d); } catch (e) { setError(e.message); }
@@ -142,7 +137,7 @@ export default function JudgingGroups() {
             {previewBuffer > 0 && (
               <span className="badge accent" style={{ fontSize: 12 }}>First demo ~{startStr.replace(/^0/, '')}</span>
             )}
-            <span className="faint small" style={{ marginLeft: 4 }}>This buffer is saved and used automatically when you click Start in Final Demos.</span>
+            <span className="faint small" style={{ marginLeft: 4 }}>Shifts all group time slots forward by this many minutes from now.</span>
           </div>
         </div>
       )}

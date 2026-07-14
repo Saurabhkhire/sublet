@@ -166,7 +166,7 @@ export default function DemoSchedule() {
   const [manualNextId, setManualNextId] = useState(null); // pending slot after outro
   const [aiQuestion, setAiQuestion]   = useState('');
   const [aiLoading, setAiLoading]     = useState(false);
-  const [bufferMins, setBufferMins]   = useState(() => Number(localStorage.getItem(`demo_buffer_${hid}`) || 0));
+  const [bufferMins, setBufferMins]   = useState(0);
 
   const timerRef   = useRef(null);
   const alerted2   = useRef(false);
@@ -652,12 +652,7 @@ export default function DemoSchedule() {
       {isAdmin && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 0' }}>
           {!isLive ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <button style={B} onClick={startDemo} disabled={!slots.some(isEligible)}>▶ Start Final Demos</button>
-              {bufferMins > 0 && (
-                <span className="badge accent" style={{ fontSize: 12 }}>+{bufferMins} min buffer (set in Demo Groups)</span>
-              )}
-            </div>
+            <button style={B} onClick={startDemo} disabled={!slots.some(isEligible)}>▶ Start Final Demos</button>
           ) : (
             <button style={B_RED} onClick={async () => { stopTimer(); setIsLive(false); setCurrentId(null); setPendingId(null); }}>■ End</button>
           )}
