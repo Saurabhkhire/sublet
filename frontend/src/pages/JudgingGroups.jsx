@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
-import { get, post, del } from '../api.js';
+import { get, post, put, del } from '../api.js';
 import { useAuth } from '../auth.jsx';
 
 const GROUP_COLORS = { A: '#ef4444', B: '#3b82f6', C: '#22c55e', D: '#f59e0b', E: '#a855f7', F: '#06b6d4', G: '#ec4899', H: '#84cc16' };
@@ -58,7 +58,19 @@ export default function JudgingGroups() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [previewBuffer, setPreviewBuffer] = useState(0);
+  const [busySet, setBusySet] = useState(false);
   function updateBuffer(v) { setPreviewBuffer(Math.max(0, Number(v))); }
+
+  async function setDemoSchedule() {
+    const first = demoSlots[0];
+    if (!first) return;
+    setBusySet(true);
+    try {
+      const startMs = Date.now() + (previewBuffer || 0) * 60 * 1000;
+      await put(`/api/hackathons/${hid}/demo-slots/${first.id}`, { actual_start: new Date(startMs).toISOString() });
+      await load();
+    } catch (e) { setError(e.message); } finally { setBusySet(false); }
+  }
 
   async function load() {
     try { const d = await get(`/api/hackathons/${hid}/judging-groups`); setData(d); } catch (e) { setError(e.message); }
@@ -122,22 +134,34 @@ export default function JudgingGroups() {
       {error && <p className="error">{error}</p>}
       {msg && <p className="success">{msg}</p>}
 
-      {/* Admin: buffer — set here, synced to Final Demos Start button */}
+      {/* Admin: set demo schedule start time */}
       {isAdmin && (
         <div className="card" style={{ padding: '12px 16px' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>⏱ Demo Group Schedule</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>⏱ Start demos in</span>
+            <span style={{ fontSize: 13 }}>Start demos in</span>
             <input
               type="number" min="0" max="120" step="5"
               value={previewBuffer}
               onChange={(e) => updateBuffer(e.target.value)}
               style={{ width: 60, padding: '4px 8px', fontSize: 14, borderRadius: 6, border: '1px solid var(--border)', fontWeight: 600 }}
             />
-            <span style={{ fontSize: 13, fontWeight: 600 }}>min</span>
-            {previewBuffer > 0 && (
-              <span className="badge accent" style={{ fontSize: 12 }}>First demo ~{startStr.replace(/^0/, '')}</span>
+            <span style={{ fontSize: 13 }}>min</span>
+            <button
+              onClick={setDemoSchedule}
+              disabled={busySet || demoSlots.length === 0}
+              style={{ padding: '5px 16px', fontSize: 13, fontWeight: 600 }}
+            >
+              {busySet ? 'Setting…' : '▶ Start'}
+            </button>
+            {firstActual && (
+              <span className="badge accent" style={{ fontSize: 12 }}>
+                Scheduled from {startStr.replace(/^0/, '')}
+              </span>
             )}
-            <span className="faint small" style={{ marginLeft: 4 }}>Shifts all group time slots forward by this many minutes from now.</span>
+          </div>
+          <div className="faint small" style={{ marginTop: 6 }}>
+            Press Start to lock in the group times. All participants will see the projected schedule.
           </div>
         </div>
       )}
