@@ -743,6 +743,8 @@ function JudgesAndAssignmentSection({ hid }) {
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [bufferMins, setBufferMins] = useState(0);
+  const [busyStart, setBusyStart] = useState(false);
 
   async function load() {
     try {
@@ -823,6 +825,19 @@ function JudgesAndAssignmentSection({ hid }) {
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   }
 
+  async function startDemos() {
+    setBusyStart(true); setError('');
+    try {
+      const slots = await get(`/api/hackathons/${hid}/demo-slots`);
+      const first = slots[0];
+      if (!first) { setError('No demo slots found. Add slots in the Final Demos section first.'); return; }
+      const startMs = Date.now() + (bufferMins || 0) * 60 * 1000;
+      await put(`/api/hackathons/${hid}/demo-slots/${first.id}`, { actual_start: new Date(startMs).toISOString() });
+      setMsg(`Demo schedule set — starts at ${new Date(startMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+      setTimeout(() => setMsg(''), 4000);
+    } catch (e) { setError(e.message); } finally { setBusyStart(false); }
+  }
+
   const ppg = data?.projects_per_group || 0;
   const need = data?.group_count_needed || 0;
   const assigned = data?.config?.assigned_at;
@@ -891,6 +906,27 @@ function JudgesAndAssignmentSection({ hid }) {
             : <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4, background: '#f0fdf4', color: '#16a34a', fontWeight: 600 }}>● Auto-assigning new joins</span>}
         </div>
       )}
+
+      {/* ── Demo schedule start ── */}
+      <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--surface-2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>⏱ Demo Group Schedule</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13 }}>Start demos in</span>
+          <input
+            type="number" min="0" max="120" step="5"
+            value={bufferMins}
+            onChange={(e) => setBufferMins(Math.max(0, Number(e.target.value)))}
+            style={{ width: 60, padding: '4px 8px', fontSize: 14, borderRadius: 6, border: '1px solid var(--border)', fontWeight: 600 }}
+          />
+          <span style={{ fontSize: 13 }}>min</span>
+          <button onClick={startDemos} disabled={busyStart} style={{ padding: '5px 16px', fontSize: 13, fontWeight: 600 }}>
+            {busyStart ? 'Setting…' : '▶ Start'}
+          </button>
+        </div>
+        <div className="faint small" style={{ marginTop: 6 }}>
+          Locks in the group schedule for all participants. Times update live on the Project Demo Groups page.
+        </div>
+      </div>
 
       <div className="divider" style={{ margin: '18px 0 14px' }} />
 
