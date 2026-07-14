@@ -261,13 +261,16 @@ function ProjectBody({ p }) {
   return (
     <div>
       <p className="muted" style={{ marginTop: 0 }}>{p.short_description || 'No description provided.'}</p>
-      <div className="row" style={{ gap: 12, marginTop: 6 }}>
+      <div className="row" style={{ gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
         {p.demo_video_link
-          ? <a className="btn" style={{ flex: 1, minWidth: 200 }} href={p.demo_video_link} target="_blank" rel="noreferrer">▶ Watch Demo Video</a>
-          : <span className="badge" style={{ flex: 1, justifyContent: 'center', minWidth: 200 }}>No demo video</span>}
+          ? <a className="btn" style={{ flex: 1, minWidth: 160 }} href={p.demo_video_link} target="_blank" rel="noreferrer">▶ Watch Demo Video</a>
+          : <span className="badge" style={{ flex: 1, justifyContent: 'center', minWidth: 160 }}>No demo video</span>}
         {p.git_link
-          ? <a className="btn secondary" style={{ flex: 1, minWidth: 200 }} href={p.git_link} target="_blank" rel="noreferrer">⌥ View GitHub Repository</a>
-          : <span className="badge" style={{ flex: 1, justifyContent: 'center', minWidth: 200 }}>No repository</span>}
+          ? <a className="btn secondary" style={{ flex: 1, minWidth: 160 }} href={p.git_link} target="_blank" rel="noreferrer">⌥ GitHub Repo</a>
+          : <span className="badge" style={{ flex: 1, justifyContent: 'center', minWidth: 160 }}>No repository</span>}
+        {p.app_url
+          ? <a className="btn secondary" style={{ flex: 1, minWidth: 160 }} href={p.app_url} target="_blank" rel="noreferrer">🌐 Live App</a>
+          : <span className="badge" style={{ flex: 1, justifyContent: 'center', minWidth: 160 }}>No live app</span>}
       </div>
 
       <div style={{ marginTop: 18 }}>
