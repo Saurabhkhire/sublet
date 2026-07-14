@@ -128,7 +128,7 @@ export default function JudgingGroups() {
       {msg && <p className="success">{msg}</p>}
 
       {/* Admin: buffer — set here, synced to Final Demos Start button */}
-      {isAdmin && !firstActual && (
+      {isAdmin && (
         <div className="card" style={{ padding: '12px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 13, fontWeight: 600 }}>⏱ Start demos in</span>
