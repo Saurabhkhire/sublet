@@ -10,23 +10,31 @@ function fmtTime(h, m) {
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
-function groupWindow(g, startStr, judgeTimeMins) {
-  if (!startStr || !judgeTimeMins) return null;
+// Compute sequential group schedule: each group starts when the previous one ends.
+// Duration of each group = project count × perProjectMins.
+function computeGroupSchedule(groupKeys, groups, startStr, pp) {
+  if (!startStr || !pp) return {};
   const [hh, mm] = startStr.split(':').map(Number);
-  const idx = g.charCodeAt(0) - 65;
-  const startMins = hh * 60 + mm + idx * judgeTimeMins;
-  const endMins = startMins + judgeTimeMins;
-  return `${fmtTime(Math.floor(startMins / 60) % 24, startMins % 60)} – ${fmtTime(Math.floor(endMins / 60) % 24, endMins % 60)}`;
-}
-
-function projectSlotTime(g, posInGroup, startStr, judgeTimeMins, perProjectMins) {
-  if (!startStr || !judgeTimeMins || !perProjectMins) return null;
-  const [hh, mm] = startStr.split(':').map(Number);
-  const idx = g.charCodeAt(0) - 65;
-  const groupStart = hh * 60 + mm + idx * judgeTimeMins;
-  const slotStart = groupStart + posInGroup * perProjectMins;
-  const slotEnd = slotStart + perProjectMins;
-  return `${fmtTime(Math.floor(slotStart / 60) % 24, slotStart % 60)} – ${fmtTime(Math.floor(slotEnd / 60) % 24, slotEnd % 60)}`;
+  let cursor = hh * 60 + mm;
+  const result = {};
+  for (const g of groupKeys) {
+    const projs = groups[g]?.projects || [];
+    const startMins = cursor;
+    const endMins = startMins + projs.length * pp;
+    const projectSlots = projs.map((_, idx) => {
+      const sm = startMins + idx * pp;
+      const em = sm + pp;
+      return `${fmtTime(Math.floor(sm / 60) % 24, sm % 60)} – ${fmtTime(Math.floor(em / 60) % 24, em % 60)}`;
+    });
+    result[g] = {
+      window: projs.length > 0
+        ? `${fmtTime(Math.floor(startMins / 60) % 24, startMins % 60)} – ${fmtTime(Math.floor(endMins / 60) % 24, endMins % 60)}`
+        : null,
+      projectSlots,
+    };
+    cursor = endMins;
+  }
+  return result;
 }
 
 function fmtActual(iso) {
@@ -95,7 +103,6 @@ export default function JudgingGroups() {
   const groups = data.groups || {};
   const groupKeys = Object.keys(groups).sort();
   const assigned = data.config?.assigned_at;
-  const jt = data.config?.judge_time_minutes;
   const pp = data.config?.per_project_minutes;
   const nowHHMM = (() => { const d = new Date(); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; })();
   // Use actual_start from the first demo slot when available (demos have begun).
@@ -113,6 +120,7 @@ export default function JudgingGroups() {
     const total = hh * 60 + mm + (isAdmin ? (previewBuffer || 0) : 0);
     return `${String(Math.floor(total / 60) % 24).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`;
   })();
+  const groupSchedule = computeGroupSchedule(groupKeys, groups, startStr, pp);
   const timedSlots = computeDemoTimes(demoSlots, startStr);
   const demoByGroup = {};
   for (const s of timedSlots) {
@@ -124,7 +132,6 @@ export default function JudgingGroups() {
   const myProject = data.my_project;
   const myDemoSlot = myProject ? timedSlots.find((s) => s.project_id === myProject.id) : null;
 
-  // Find the position of my project in its group for slot time calculation
   const myGroupProjects = myProject?.judge_group ? (groups[myProject.judge_group]?.projects || []) : [];
   const myProjectPosInGroup = myGroupProjects.findIndex((p) => p.id === myProject?.id);
 
@@ -177,14 +184,14 @@ export default function JudgingGroups() {
                 Demo Group:{' '}
                 <strong style={{ color: gc(myProject.judge_group), fontSize: 18 }}>{myProject.judge_group}</strong>
               </span>
-              {groupWindow(myProject.judge_group, startStr, jt) && (
+              {groupSchedule[myProject.judge_group]?.window && (
                 <span className="badge" style={{ background: gc(myProject.judge_group) + '22', color: gc(myProject.judge_group), fontWeight: 600, fontSize: 13 }}>
-                  {groupWindow(myProject.judge_group, startStr, jt)}
+                  {groupSchedule[myProject.judge_group].window}
                 </span>
               )}
-              {myProjectPosInGroup >= 0 && pp && startStr && (
+              {myProjectPosInGroup >= 0 && groupSchedule[myProject.judge_group]?.projectSlots[myProjectPosInGroup] && (
                 <span className="muted small">
-                  Your slot: <strong>{projectSlotTime(myProject.judge_group, myProjectPosInGroup, startStr, jt, pp)}</strong>
+                  Your slot: <strong>{groupSchedule[myProject.judge_group].projectSlots[myProjectPosInGroup]}</strong>
                 </span>
               )}
               {myDemoSlot && (
@@ -210,9 +217,9 @@ export default function JudgingGroups() {
                   You are in{' '}
                   <strong style={{ color: gc(data.my_judge_group), fontSize: 20 }}>Group {data.my_judge_group}</strong>
                 </span>
-                {groupWindow(data.my_judge_group, startStr, jt) && (
+                {groupSchedule[data.my_judge_group]?.window && (
                   <span className="badge" style={{ background: gc(data.my_judge_group) + '22', color: gc(data.my_judge_group), fontWeight: 600, fontSize: 13 }}>
-                    {groupWindow(data.my_judge_group, startStr, jt)}
+                    {groupSchedule[data.my_judge_group].window}
                   </span>
                 )}
               </div>
@@ -223,8 +230,8 @@ export default function JudgingGroups() {
                     <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--surface-2)', borderRadius: 6 }}>
                       <div>
                         <div style={{ fontWeight: 500 }}>{p.name}</div>
-                        {pp && startStr && (
-                          <div className="small muted">{projectSlotTime(data.my_judge_group, idx, startStr, jt, pp)}</div>
+                        {groupSchedule[data.my_judge_group]?.projectSlots[idx] && (
+                          <div className="small muted">{groupSchedule[data.my_judge_group].projectSlots[idx]}</div>
                         )}
                       </div>
                       <Link to={`/h/${hid}/judging`}>
@@ -274,7 +281,7 @@ export default function JudgingGroups() {
             <div key={g} style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontWeight: 700, fontSize: 15, color: gc(g) }}>Group {g}</span>
-                {groupWindow(g, startStr, jt) && <span className="muted small">{groupWindow(g, startStr, jt)}</span>}
+                {groupSchedule[g]?.window && <span className="muted small">{groupSchedule[g].window}</span>}
               </div>
               <div className="stack" style={{ gap: 4 }}>
                 {(demoByGroup[g] || []).map((s) => {
@@ -319,8 +326,8 @@ export default function JudgingGroups() {
               <div key={g} className="card flat" style={{ border: `2px solid ${gc(g)}`, background: 'var(--surface-2)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                   <div style={{ fontWeight: 700, fontSize: 22, color: gc(g) }}>Group {g}</div>
-                  {groupWindow(g, startStr, jt) && (
-                    <div className="small muted" style={{ textAlign: 'right', lineHeight: 1.3, marginTop: 4 }}>{groupWindow(g, startStr, jt)}</div>
+                  {groupSchedule[g]?.window && (
+                    <div className="small muted" style={{ textAlign: 'right', lineHeight: 1.3, marginTop: 4 }}>{groupSchedule[g].window}</div>
                   )}
                 </div>
                 {groups[g].judges.length > 0 && (
@@ -332,8 +339,8 @@ export default function JudgingGroups() {
                   {groups[g].projects.map((p, idx) => (
                     <div key={p.id} style={{ fontSize: 13, padding: '5px 8px', background: 'var(--surface)', borderRadius: 5 }}>
                       <div>{p.name}</div>
-                      {pp && startStr && (
-                        <div className="small muted">{projectSlotTime(g, idx, startStr, jt, pp)}</div>
+                      {groupSchedule[g]?.projectSlots[idx] && (
+                        <div className="small muted">{groupSchedule[g].projectSlots[idx]}</div>
                       )}
                     </div>
                   ))}
