@@ -10,29 +10,27 @@ function fmtTime(h, m) {
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
-// Compute sequential group schedule: each group starts when the previous one ends.
-// Duration of each group = project count × perProjectMins.
+// All groups start at the same time (parallel rooms).
+// Within each group, projects are sequential: project idx starts at base + idx × pp.
 function computeGroupSchedule(groupKeys, groups, startStr, pp) {
   if (!startStr || !pp) return {};
   const [hh, mm] = startStr.split(':').map(Number);
-  let cursor = hh * 60 + mm;
+  const baseMins = hh * 60 + mm;
   const result = {};
   for (const g of groupKeys) {
     const projs = groups[g]?.projects || [];
-    const startMins = cursor;
-    const endMins = startMins + projs.length * pp;
+    const endMins = baseMins + projs.length * pp;
     const projectSlots = projs.map((_, idx) => {
-      const sm = startMins + idx * pp;
+      const sm = baseMins + idx * pp;
       const em = sm + pp;
       return `${fmtTime(Math.floor(sm / 60) % 24, sm % 60)} – ${fmtTime(Math.floor(em / 60) % 24, em % 60)}`;
     });
     result[g] = {
       window: projs.length > 0
-        ? `${fmtTime(Math.floor(startMins / 60) % 24, startMins % 60)} – ${fmtTime(Math.floor(endMins / 60) % 24, endMins % 60)}`
+        ? `${fmtTime(Math.floor(baseMins / 60) % 24, baseMins % 60)} – ${fmtTime(Math.floor(endMins / 60) % 24, endMins % 60)}`
         : null,
       projectSlots,
     };
-    cursor = endMins;
   }
   return result;
 }
