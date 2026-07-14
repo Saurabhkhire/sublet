@@ -166,7 +166,7 @@ export default function DemoSchedule() {
   const [manualNextId, setManualNextId] = useState(null); // pending slot after outro
   const [aiQuestion, setAiQuestion]   = useState('');
   const [aiLoading, setAiLoading]     = useState(false);
-  const [bufferMins, setBufferMins]   = useState(0);
+  const [bufferMins, setBufferMins]   = useState(() => Number(localStorage.getItem(`demo_buffer_${hid}`) || 0));
 
   const timerRef   = useRef(null);
   const alerted2   = useRef(false);
@@ -652,18 +652,11 @@ export default function DemoSchedule() {
       {isAdmin && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 0' }}>
           {!isLive ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <button style={B} onClick={startDemo} disabled={!slots.some(isEligible)}>▶ Start Final Demos</button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <label style={{ fontSize: 13, color: 'var(--muted)', whiteSpace: 'nowrap' }}>Start in</label>
-                <input
-                  type="number" min="0" max="120" step="5"
-                  value={bufferMins}
-                  onChange={(e) => setBufferMins(Math.max(0, Number(e.target.value)))}
-                  style={{ width: 56, padding: '4px 8px', fontSize: 13, borderRadius: 6, border: '1px solid var(--border)' }}
-                />
-                <span style={{ fontSize: 13, color: 'var(--muted)' }}>min</span>
-              </div>
+              {bufferMins > 0 && (
+                <span className="badge accent" style={{ fontSize: 12 }}>+{bufferMins} min buffer (set in Demo Groups)</span>
+              )}
             </div>
           ) : (
             <button style={B_RED} onClick={async () => { stopTimer(); setIsLive(false); setCurrentId(null); setPendingId(null); }}>■ End</button>

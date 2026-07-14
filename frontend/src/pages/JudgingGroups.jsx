@@ -57,7 +57,13 @@ export default function JudgingGroups() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  const [previewBuffer, setPreviewBuffer] = useState(0);
+  const BUFFER_KEY = `demo_buffer_${hid}`;
+  const [previewBuffer, setPreviewBuffer] = useState(() => Number(localStorage.getItem(`demo_buffer_${hid}`) || 0));
+  function updateBuffer(v) {
+    const n = Math.max(0, Number(v));
+    setPreviewBuffer(n);
+    localStorage.setItem(`demo_buffer_${hid}`, String(n));
+  }
 
   async function load() {
     try { const d = await get(`/api/hackathons/${hid}/judging-groups`); setData(d); } catch (e) { setError(e.message); }
@@ -121,21 +127,22 @@ export default function JudgingGroups() {
       {error && <p className="error">{error}</p>}
       {msg && <p className="success">{msg}</p>}
 
-      {/* Admin: buffer preview control */}
+      {/* Admin: buffer — set here, synced to Final Demos Start button */}
       {isAdmin && !firstActual && (
-        <div className="card" style={{ padding: '10px 16px' }}>
+        <div className="card" style={{ padding: '12px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, color: 'var(--muted)' }}>⏱ Preview times starting</span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>⏱ Start demos in</span>
             <input
               type="number" min="0" max="120" step="5"
               value={previewBuffer}
-              onChange={(e) => setPreviewBuffer(Math.max(0, Number(e.target.value)))}
-              style={{ width: 56, padding: '4px 8px', fontSize: 13, borderRadius: 6, border: '1px solid var(--border)' }}
+              onChange={(e) => updateBuffer(e.target.value)}
+              style={{ width: 60, padding: '4px 8px', fontSize: 14, borderRadius: 6, border: '1px solid var(--border)', fontWeight: 600 }}
             />
-            <span style={{ fontSize: 13, color: 'var(--muted)' }}>
-              min from now {previewBuffer > 0 && `(~${startStr.replace(/^0/, '')})`}
-            </span>
-            <span className="faint small">Set same buffer in Final Demos before clicking Start.</span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>min</span>
+            {previewBuffer > 0 && (
+              <span className="badge accent" style={{ fontSize: 12 }}>First demo ~{startStr.replace(/^0/, '')}</span>
+            )}
+            <span className="faint small" style={{ marginLeft: 4 }}>This buffer is saved and used automatically when you click Start in Final Demos.</span>
           </div>
         </div>
       )}
