@@ -57,6 +57,7 @@ export default function JudgingGroups() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [previewBuffer, setPreviewBuffer] = useState(0);
 
   async function load() {
     try { const d = await get(`/api/hackathons/${hid}/judging-groups`); setData(d); } catch (e) { setError(e.message); }
@@ -84,7 +85,21 @@ export default function JudgingGroups() {
   const jt = data.config?.judge_time_minutes;
   const pp = data.config?.per_project_minutes;
   const nowHHMM = (() => { const d = new Date(); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; })();
-  const startStr = meta.hackathon?.start_time || nowHHMM;
+  // Use actual_start from the first demo slot when available (demos have begun).
+  // Otherwise anchor to current clock time + any admin preview buffer.
+  const firstActual = demoSlots.find((s) => s.actual_start);
+  const baseStr = (() => {
+    if (firstActual) {
+      const d = new Date(firstActual.actual_start);
+      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
+    return nowHHMM;
+  })();
+  const startStr = (() => {
+    const [hh, mm] = baseStr.split(':').map(Number);
+    const total = hh * 60 + mm + (isAdmin ? (previewBuffer || 0) : 0);
+    return `${String(Math.floor(total / 60) % 24).padStart(2,'0')}:${String(total % 60).padStart(2,'0')}`;
+  })();
   const timedSlots = computeDemoTimes(demoSlots, startStr);
   const demoByGroup = {};
   for (const s of timedSlots) {
@@ -105,6 +120,25 @@ export default function JudgingGroups() {
       <h1 style={{ marginBottom: 4 }}>Project Demo Groups</h1>
       {error && <p className="error">{error}</p>}
       {msg && <p className="success">{msg}</p>}
+
+      {/* Admin: buffer preview control */}
+      {isAdmin && !firstActual && (
+        <div className="card" style={{ padding: '10px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, color: 'var(--muted)' }}>⏱ Preview times starting</span>
+            <input
+              type="number" min="0" max="120" step="5"
+              value={previewBuffer}
+              onChange={(e) => setPreviewBuffer(Math.max(0, Number(e.target.value)))}
+              style={{ width: 56, padding: '4px 8px', fontSize: 13, borderRadius: 6, border: '1px solid var(--border)' }}
+            />
+            <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+              min from now {previewBuffer > 0 && `(~${startStr.replace(/^0/, '')})`}
+            </span>
+            <span className="faint small">Set same buffer in Final Demos before clicking Start.</span>
+          </div>
+        </div>
+      )}
 
       {/* ── Participant: my project card ── */}
       {myProject && (

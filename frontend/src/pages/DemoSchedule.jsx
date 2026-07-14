@@ -166,6 +166,7 @@ export default function DemoSchedule() {
   const [manualNextId, setManualNextId] = useState(null); // pending slot after outro
   const [aiQuestion, setAiQuestion]   = useState('');
   const [aiLoading, setAiLoading]     = useState(false);
+  const [bufferMins, setBufferMins]   = useState(0);
 
   const timerRef   = useRef(null);
   const alerted2   = useRef(false);
@@ -210,21 +211,26 @@ export default function DemoSchedule() {
     setCurrentId(first.id); setPendingId(null);
     setElapsed(0);
 
-    // Mark speaking first so UI shows LIVE during announcement
-    await put(`${base}/${first.id}`, { status: 'speaking', actual_start: new Date().toISOString() });
+    // Buffer shifts the schedule anchor forward by N minutes from click time.
+    const scheduledStart = Date.now() + (bufferMins || 0) * 60 * 1000;
+
+    // Mark speaking first so UI shows LIVE during announcement.
+    // actual_start uses the buffered time so JudgingGroups shows the right projected times.
+    await put(`${base}/${first.id}`, { status: 'speaking', actual_start: new Date(scheduledStart).toISOString() });
     await load();
 
     const voiceMode = meta.hackathon.voice_mode || 'off';
     if (voiceMode !== 'off' && !autoStart) {
       setManualText(slotIntroText(first, true, voiceMode));
       setManualStep('speech');
+      setLiveStartedAt(scheduledStart);
       return; // admin clicks 🎙 Speak Intro then ▶ Start Timer
     }
 
     await speakVoice(slotIntroText(first, true, voiceMode), voiceMode);
 
+    setLiveStartedAt(scheduledStart);
     const now = Date.now();
-    setLiveStartedAt(now);
     startTimer(now);
     // Start voice agent script in background at the moment the timer begins.
     if (first.voice_agent && first.voice_agent !== 'none' && first.voice_script) {
@@ -646,7 +652,19 @@ export default function DemoSchedule() {
       {isAdmin && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 0' }}>
           {!isLive ? (
-            <button style={B} onClick={startDemo} disabled={!slots.some(isEligible)}>▶ Start Final Demos</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <button style={B} onClick={startDemo} disabled={!slots.some(isEligible)}>▶ Start Final Demos</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <label style={{ fontSize: 13, color: 'var(--muted)', whiteSpace: 'nowrap' }}>Start in</label>
+                <input
+                  type="number" min="0" max="120" step="5"
+                  value={bufferMins}
+                  onChange={(e) => setBufferMins(Math.max(0, Number(e.target.value)))}
+                  style={{ width: 56, padding: '4px 8px', fontSize: 13, borderRadius: 6, border: '1px solid var(--border)' }}
+                />
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>min</span>
+              </div>
+            </div>
           ) : (
             <button style={B_RED} onClick={async () => { stopTimer(); setIsLive(false); setCurrentId(null); setPendingId(null); }}>■ End</button>
           )}
