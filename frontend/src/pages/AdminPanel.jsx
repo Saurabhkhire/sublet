@@ -1208,69 +1208,116 @@ function DemoSlotsSection({ hid }) {
 
 function AwardsSection({ hid }) {
   const [projects, setProjects] = useState([]);
-  const [tags, setTags] = useState({});
+  const [tags, setTags] = useState({});   // { pid: string[] }
+  const [inputs, setInputs] = useState({}); // { pid: string } — current add-input value
   const [msg, setMsg] = useState({});
   const [error, setError] = useState('');
+  const [downloading, setDownloading] = useState(false);
 
   async function load() {
     try {
       const all = await get(`/api/hackathons/${hid}/projects`);
       setProjects(all);
       const t = {};
-      for (const p of all) t[p.id] = p.award_tag || '';
+      for (const p of all) t[p.id] = p.award_tags?.length ? [...p.award_tags] : (p.award_tag ? [p.award_tag] : []);
       setTags(t);
     } catch (e) { setError(e.message); }
   }
   useEffect(load, [hid]);
 
-  async function saveTag(pid) {
+  async function saveTags(pid, newTags) {
     try {
-      await put(`/api/hackathons/${hid}/projects/${pid}/award`, { award_tag: tags[pid] || '' });
+      await put(`/api/hackathons/${hid}/projects/${pid}/award`, { award_tags: newTags });
       setMsg((m) => ({ ...m, [pid]: '✓' }));
       setTimeout(() => setMsg((m) => ({ ...m, [pid]: '' })), 1500);
     } catch (e) { setError(e.message); }
   }
 
-  const PRESETS = ['Finalist', '1st Place', '2nd Place', '3rd Place'];
+  function addTag(pid) {
+    const val = (inputs[pid] || '').trim();
+    if (!val) return;
+    const existing = tags[pid] || [];
+    if (existing.includes(val)) { setInputs((i) => ({ ...i, [pid]: '' })); return; }
+    const updated = [...existing, val];
+    setTags((t) => ({ ...t, [pid]: updated }));
+    setInputs((i) => ({ ...i, [pid]: '' }));
+    saveTags(pid, updated);
+  }
+
+  function removeTag(pid, tag) {
+    const updated = (tags[pid] || []).filter((t) => t !== tag);
+    setTags((t) => ({ ...t, [pid]: updated }));
+    saveTags(pid, updated);
+  }
+
+  async function downloadCSV() {
+    setDownloading(true);
+    try {
+      const { getToken } = await import('../api.js');
+      const res = await fetch(`/api/hackathons/${hid}/projects/export`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `projects-export.csv`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { setError(e.message); } finally { setDownloading(false); }
+  }
+
+  const PRESETS = ['1st Place', '2nd Place', '3rd Place', 'Finalist', 'Best Design', 'Best Tech', 'Best Impact'];
 
   return (
     <section className="card">
-      <h3 style={{ marginTop: 0, marginBottom: 4 }}>🏆 Awards</h3>
-      <p className="muted small" style={{ marginTop: 0, marginBottom: 12 }}>
-        Tag projects with award labels. These appear on the <strong>Winners</strong> page and in the demo schedule.
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+        <div>
+          <h3 style={{ marginTop: 0, marginBottom: 4 }}>🏆 Awards</h3>
+          <p className="muted small" style={{ margin: 0 }}>
+            Tag projects with award labels — a project can win multiple awards. Shown on the Winners page.
+          </p>
+        </div>
+        <button onClick={downloadCSV} disabled={downloading} style={{ flexShrink: 0 }}>
+          {downloading ? 'Preparing…' : '⬇ Download All Projects CSV'}
+        </button>
+      </div>
       {error && <p className="error">{error}</p>}
       {projects.length === 0 && <p className="faint small">No projects submitted yet.</p>}
-      <div className="stack" style={{ gap: 6 }}>
+      <div className="stack" style={{ gap: 8 }}>
         {projects.map((p) => (
-          <div key={p.id} style={{ display: 'grid', gridTemplateColumns: '1fr 200px 80px auto', gap: 8, alignItems: 'center', padding: '8px 12px', background: 'var(--surface-2)', borderRadius: 6 }}>
-            <div>
-              <div style={{ fontWeight: 500, fontSize: 13 }}>{p.name}</div>
-              {p.participants?.length > 0 && <div className="small muted">{p.participants.map((u) => u.email).join(', ')}</div>}
+          <div key={p.id} style={{ padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</div>
+                {p.participants?.length > 0 && <div className="small muted">{p.participants.map((u) => u.email).join(', ')}</div>}
+              </div>
+              {msg[p.id] && <span className="success small" style={{ flexShrink: 0 }}>{msg[p.id]}</span>}
             </div>
-            <input
-              value={tags[p.id] || ''}
-              onChange={(e) => setTags((t) => ({ ...t, [p.id]: e.target.value }))}
-              placeholder="e.g. 1st Place, Finalist…"
-              list={`presets-${p.id}`}
-              style={{ fontSize: 13, padding: '5px 8px' }}
-            />
-            <datalist id={`presets-${p.id}`}>
-              {PRESETS.map((pr) => <option key={pr} value={pr} />)}
-            </datalist>
-            <button style={spBtn} onClick={() => saveTag(p.id)}>
-              {msg[p.id] || 'Save'}
-            </button>
-            {tags[p.id] && (
-              <button style={spBtnRed} title="Clear award" onClick={async () => {
-                setTags((t) => ({ ...t, [p.id]: '' }));
-                try {
-                  await put(`/api/hackathons/${hid}/projects/${p.id}/award`, { award_tag: '' });
-                  setMsg((m) => ({ ...m, [p.id]: '✓' }));
-                  setTimeout(() => setMsg((m) => ({ ...m, [p.id]: '' })), 1500);
-                } catch (e) { setError(e.message); }
-              }}>✕</button>
+            {(tags[p.id] || []).length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {(tags[p.id] || []).map((tag) => (
+                  <span key={tag} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 20, background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 600 }}>
+                    {tag}
+                    <button type="button" onClick={() => removeTag(p.id, tag)}
+                      style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1, opacity: 0.8 }}>✕</button>
+                  </span>
+                ))}
+              </div>
             )}
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <input
+                value={inputs[p.id] || ''}
+                onChange={(e) => setInputs((i) => ({ ...i, [p.id]: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(p.id); } }}
+                placeholder="Add award…"
+                list={`presets-${p.id}`}
+                style={{ fontSize: 13, padding: '4px 8px', flex: 1, minWidth: 0 }}
+              />
+              <datalist id={`presets-${p.id}`}>
+                {PRESETS.map((pr) => <option key={pr} value={pr} />)}
+              </datalist>
+              <button type="button" style={spBtn} onClick={() => addTag(p.id)}>+ Add</button>
+            </div>
           </div>
         ))}
       </div>

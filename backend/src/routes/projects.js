@@ -44,8 +44,18 @@ async function loadProjectDetail(projectId) {
     : null;
   const total_investment = Math.round(Number(agg.inv || 0) * 100) / 100;
   const investor_count = Number(agg.inv_count || 0);
+  // Parse award_tags — stored as JSON array or legacy plain string
+  let award_tags = [];
+  if (project.award_tag) {
+    try {
+      const parsed = JSON.parse(project.award_tag);
+      award_tags = Array.isArray(parsed) ? parsed.filter(Boolean) : [String(parsed)];
+    } catch {
+      award_tags = [project.award_tag];
+    }
+  }
   return {
-    ...project, participants, tracks, sponsors,
+    ...project, award_tags, participants, tracks, sponsors,
     judge_count, average_score, category_averages, total_investment, investor_count,
   };
 }
@@ -150,6 +160,32 @@ router.post('/', async (req, res) => {
     if (validSponsors.includes(sid)) await run('INSERT INTO project_sponsors (project_id, sponsor_id) VALUES (?, ?)', [projectId, sid]);
   }
   res.status(201).json(await loadProjectDetail(projectId));
+});
+
+// CSV export — all projects with scores, investment, awards (admin only).
+router.get('/export', adminOnly, async (req, res) => {
+  const rows = await all('SELECT * FROM projects WHERE hackathon_id = ? ORDER BY id', [req.hackathonId]);
+  const detailed = [];
+  for (const r of rows) detailed.push(await loadProjectDetail(r.id));
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const headers = ['Name','Description','Git Link','Demo Video','Live App','Team Emails','Tracks','Sponsors','Avg Score','Total Investment ($)','Awards'];
+  const csvRows = detailed.map((p) => [
+    esc(p.name),
+    esc(p.short_description),
+    esc(p.git_link),
+    esc(p.demo_video_link),
+    esc(p.app_url),
+    esc(p.participants.map((u) => u.email).join('; ')),
+    esc(p.tracks.map((t) => t.name).join('; ')),
+    esc(p.sponsors.map((s) => s.name).join('; ')),
+    esc(p.average_score ?? ''),
+    esc(p.total_investment ?? 0),
+    esc(p.award_tags.join('; ')),
+  ].join(','));
+  const csv = [headers.map(esc).join(','), ...csvRows].join('\r\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="projects-export.csv"`);
+  res.send(csv);
 });
 
 // Public winners list — projects with a non-empty award_tag (any logged-in user).
@@ -283,13 +319,15 @@ router.put('/:projectId', async (req, res) => {
   res.json(await loadProjectDetail(project.id));
 });
 
-// Set or clear the award tag on a project (admin only).
+// Set or clear awards on a project (admin only). Accepts award_tags array.
 router.put('/:projectId/award', adminOnly, async (req, res) => {
   const project = await get('SELECT id FROM projects WHERE id = ? AND hackathon_id = ?', [req.params.projectId, req.hackathonId]);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  const { award_tag } = req.body || {};
-  await run('UPDATE projects SET award_tag = ? WHERE id = ?', [String(award_tag || '').trim(), project.id]);
-  res.json({ ok: true });
+  const { award_tags } = req.body || {};
+  const tags = Array.isArray(award_tags) ? award_tags.map((s) => String(s).trim()).filter(Boolean) : [];
+  const stored = tags.length > 0 ? JSON.stringify(tags) : '';
+  await run('UPDATE projects SET award_tag = ? WHERE id = ?', [stored, project.id]);
+  res.json({ ok: true, award_tags: tags });
 });
 
 // Delete a single project (admin moderation).
