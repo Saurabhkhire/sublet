@@ -14,6 +14,7 @@ export default function AdminPanel() {
       <JudgesAndAssignmentSection hid={hid} />
       <SpeakersSection hid={hid} />
       <DemoSlotsSection hid={hid} />
+      <ExportSection hid={hid} />
       <AwardsSection hid={hid} />
       <VoiceRulesSection hid={hid} meta={meta} reload={reload} />
       <SmtpConfigSection />
@@ -1204,6 +1205,77 @@ function DemoSlotsSection({ hid }) {
   );
 }
 
+// ── Export Section ────────────────────────────────────────────────────────────
+
+function ExportSection({ hid }) {
+  const [busy, setBusy] = useState({});
+  const [error, setError] = useState('');
+
+  async function download(url, filename, key) {
+    setBusy((b) => ({ ...b, [key]: true }));
+    setError('');
+    try {
+      const { getToken } = await import('../api.js');
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) { setError(e.message); }
+    setBusy((b) => ({ ...b, [key]: false }));
+  }
+
+  const exports = [
+    {
+      key: 'projects',
+      label: '⬇ Projects CSV',
+      desc: 'All projects — name, description, links, team emails, tracks, sponsors, avg score, investment, awards',
+      url: `/api/hackathons/${hid}/projects/export`,
+      file: 'projects-export.csv',
+    },
+    {
+      key: 'users',
+      label: '⬇ Users CSV',
+      desc: 'Every participant and judge — email, LinkedIn, role, project name',
+      url: `/api/hackathons/${hid}/users/export`,
+      file: 'users-export.csv',
+    },
+    {
+      key: 'full',
+      label: '⬇ Full Data CSV',
+      desc: 'Complete raw data — one row per judge score, with all project fields, individual scores (presentation, execution, innovation, impact, implementation), investment, and comments',
+      url: `/api/hackathons/${hid}/full-export`,
+      file: 'full-data-export.csv',
+    },
+  ];
+
+  return (
+    <section className="card">
+      <h3 style={{ marginTop: 0, marginBottom: 4 }}>⬇ Export Data</h3>
+      <p className="muted small" style={{ marginTop: 0, marginBottom: 14 }}>
+        Download your hackathon data as CSV files — open in Excel or Google Sheets.
+      </p>
+      {error && <p className="error">{error}</p>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {exports.map(({ key, label, desc, url, file }) => (
+          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 8 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>{label}</div>
+              <div className="muted small">{desc}</div>
+            </div>
+            <button onClick={() => download(url, file, key)} disabled={busy[key]} style={{ flexShrink: 0, minWidth: 100 }}>
+              {busy[key] ? 'Preparing…' : 'Download'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // ── Awards Section (mark projects with award tags) ────────────────────────────
 
 function AwardsSection({ hid }) {
@@ -1212,7 +1284,6 @@ function AwardsSection({ hid }) {
   const [inputs, setInputs] = useState({}); // { pid: string } — current add-input value
   const [msg, setMsg] = useState({});
   const [error, setError] = useState('');
-  const [downloading, setDownloading] = useState(false);
 
   async function load() {
     try {
@@ -1250,36 +1321,15 @@ function AwardsSection({ hid }) {
     saveTags(pid, updated);
   }
 
-  async function downloadCSV() {
-    setDownloading(true);
-    try {
-      const { getToken } = await import('../api.js');
-      const res = await fetch(`/api/hackathons/${hid}/projects/export`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (!res.ok) throw new Error('Export failed');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `projects-export.csv`; a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) { setError(e.message); } finally { setDownloading(false); }
-  }
-
   const PRESETS = ['1st Place', '2nd Place', '3rd Place', 'Finalist', 'Best Design', 'Best Tech', 'Best Impact'];
 
   return (
     <section className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-        <div>
-          <h3 style={{ marginTop: 0, marginBottom: 4 }}>🏆 Awards</h3>
-          <p className="muted small" style={{ margin: 0 }}>
-            Tag projects with award labels — a project can win multiple awards. Shown on the Winners page.
-          </p>
-        </div>
-        <button onClick={downloadCSV} disabled={downloading} style={{ flexShrink: 0 }}>
-          {downloading ? 'Preparing…' : '⬇ Download All Projects CSV'}
-        </button>
+      <div style={{ marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0, marginBottom: 4 }}>🏆 Awards</h3>
+        <p className="muted small" style={{ margin: 0 }}>
+          Tag projects with award labels — a project can win multiple awards. Shown on the Winners page.
+        </p>
       </div>
       {error && <p className="error">{error}</p>}
       {projects.length === 0 && <p className="faint small">No projects submitted yet.</p>}

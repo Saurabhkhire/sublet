@@ -230,4 +230,123 @@ router.delete('/:hid/judges/:userId', hackathonContext, adminOnly, async (req, r
   res.json({ ok: true });
 });
 
+/* --------------------- Data Exports (admin only) --------------------- */
+
+// Users export — every participant and judge in this hackathon as CSV.
+router.get('/:hid/users/export', hackathonContext, adminOnly, async (req, res) => {
+  const participants = await all(
+    `SELECT u.email, u.linkedin, 'Participant' AS role, p.name AS project_name
+     FROM project_participants pp
+     JOIN users u ON u.id = pp.user_id
+     JOIN projects p ON p.id = pp.project_id
+     WHERE pp.hackathon_id = ?
+     ORDER BY u.email`,
+    [req.hackathonId]
+  );
+  const judges = await all(
+    `SELECT u.email, u.linkedin, 'Judge' AS role, '' AS project_name
+     FROM hackathon_judges hj
+     JOIN users u ON u.id = hj.user_id
+     WHERE hj.hackathon_id = ?
+     ORDER BY u.email`,
+    [req.hackathonId]
+  );
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const headers = ['Email', 'LinkedIn', 'Role', 'Project'];
+  const rows = [...participants, ...judges].map((u) =>
+    [esc(u.email), esc(u.linkedin), esc(u.role), esc(u.project_name)].join(',')
+  );
+  const csv = [headers.map(esc).join(','), ...rows].join('\r\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="users-export.csv"');
+  res.send(csv);
+});
+
+// Full data export — one row per judge score with all project + score fields.
+router.get('/:hid/full-export', hackathonContext, adminOnly, async (req, res) => {
+  const scoreRows = await all(
+    `SELECT
+       p.id AS project_id, p.name AS project_name, p.short_description, p.git_link,
+       p.demo_video_link, p.app_url, p.award_tag,
+       u.email AS judge_email,
+       s.presentation, s.execution, s.innovation, s.impact, s.implementation,
+       s.total, s.investment, s.comments
+     FROM scores s
+     JOIN hackathon_judges hj ON hj.id = s.judge_id
+     JOIN users u ON u.id = hj.user_id
+     JOIN projects p ON p.id = s.project_id
+     WHERE p.hackathon_id = ?
+     ORDER BY p.id, u.email`,
+    [req.hackathonId]
+  );
+
+  // Attach team emails + tracks + sponsors to each score row
+  const teamMap = {};
+  const trackMap = {};
+  const sponsorMap = {};
+  const participantRows = await all(
+    `SELECT pp.project_id, u.email FROM project_participants pp
+     JOIN users u ON u.id = pp.user_id
+     JOIN projects p ON p.id = pp.project_id WHERE p.hackathon_id = ?`,
+    [req.hackathonId]
+  );
+  for (const r of participantRows) {
+    if (!teamMap[r.project_id]) teamMap[r.project_id] = [];
+    teamMap[r.project_id].push(r.email);
+  }
+  const trackRows = await all(
+    `SELECT pt.project_id, t.name FROM project_tracks pt
+     JOIN tracks t ON t.id = pt.track_id
+     JOIN projects p ON p.id = pt.project_id WHERE p.hackathon_id = ?`,
+    [req.hackathonId]
+  );
+  for (const r of trackRows) {
+    if (!trackMap[r.project_id]) trackMap[r.project_id] = [];
+    trackMap[r.project_id].push(r.name);
+  }
+  const sponsorRows = await all(
+    `SELECT ps.project_id, s.name FROM project_sponsors ps
+     JOIN sponsors s ON s.id = ps.sponsor_id
+     JOIN projects p ON p.id = ps.project_id WHERE p.hackathon_id = ?`,
+    [req.hackathonId]
+  );
+  for (const r of sponsorRows) {
+    if (!sponsorMap[r.project_id]) sponsorMap[r.project_id] = [];
+    sponsorMap[r.project_id].push(r.name);
+  }
+
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const headers = [
+    'Project','Description','Git Link','Demo Video','Live App','Team Emails',
+    'Tracks','Sponsors','Awards',
+    'Judge Email','Presentation','Execution','Innovation','Impact','Implementation',
+    'Total Score','Investment ($)','Comments',
+  ];
+
+  const rows = scoreRows.map((s) => {
+    let awards = '';
+    if (s.award_tag) {
+      try { const p = JSON.parse(s.award_tag); awards = Array.isArray(p) ? p.join('; ') : s.award_tag; }
+      catch { awards = s.award_tag; }
+    }
+    return [
+      esc(s.project_name), esc(s.short_description), esc(s.git_link),
+      esc(s.demo_video_link), esc(s.app_url),
+      esc((teamMap[s.project_id] || []).join('; ')),
+      esc((trackMap[s.project_id] || []).join('; ')),
+      esc((sponsorMap[s.project_id] || []).join('; ')),
+      esc(awards),
+      esc(s.judge_email),
+      esc(s.presentation), esc(s.execution), esc(s.innovation),
+      esc(s.impact), esc(s.implementation),
+      esc(s.total), esc(s.investment), esc(s.comments),
+    ].join(',');
+  });
+
+  const csv = [headers.map(esc).join(','), ...rows].join('\r\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="full-data-export.csv"');
+  res.send(csv);
+});
+
 export default router;
